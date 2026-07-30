@@ -4,4 +4,10 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ipykernel>=7.3.0",
+    "pandas>=3.0.3",
+    "pillow>=12.3.0",
+    "requests>=2.34.2",
+    "tqdm>=4.70.0",
+]

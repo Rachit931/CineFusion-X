@@ -216,3 +216,28 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Ignore datasets (keep folder structure with .gitkeep)
+data/raw/*
+!data/raw/.gitkeep
+
+data/processed/*
+!data/processed/.gitkeep
+
+# ML artifacts 
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.keras
+*.joblib
+*.pkl 
+
+# Experiment tracking 
+mlruns/
+wandb/
+
+# Logs 
+logs/
+*.log
