@@ -1,20 +1,21 @@
 import os 
 import time 
 
+from pathlib import Path 
+
 import pandas as pd 
-import requests 
+import requests
+from dotenv import load_dotenv
+from tqdm import tqdm 
 
-from dotenv import load_dotenv 
-
-from config.paths import (
+from config.paths import ( 
     IMDB_DIR,
     TMDB_DIR,
     POSTERS_DIR,
 )
 
+session = requests.Session()
 # Load Environment Variables 
-
-load_dotenv()
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
@@ -23,76 +24,50 @@ if not TMDB_API_KEY:
         "TMDB_API_KEY not found in .env"
     )
 
-# TMDB URLs
-
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
-
-POSTER_BASE_URL = "https://image.tmdb.org/t/p/original"
-
-# Input / Output Files 
+# Files 
 
 IMDB_DATASET = (
     IMDB_DIR / 
     "imdb_movies_clean.csv"
 )
 
-TMDB_METADATA = ( 
+TMDB_METADATA = (
     TMDB_DIR / 
     "tmdb_metadata.csv"
 )
 
-# Load IMDb dataset 
+CHECKPOINT_FILE = (
+    TMDB_DIR / 
+    "tmdb_metadata_checkpoint.csv"
+)
 
-print("=" * 60)
-print("TMDB DATA COLLECTION")
-print("=" * 60)
+POSTERS_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
-print("\nLoading IMDb dataset...")
+TMDB_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
-imdb = pd.read_csv(IMDB_DATASET)
+# TMDB Functions
 
-print(f"Movies loaded: {len(imdb):,}")
-
-# Resume Previous Run 
-
-if TMDB_METADATA.exists(): 
-
-    existing = pd.read_csv(TMDB_METADATA)
-
-    completed_ids = set(existing["imdb_id"])
-
-    imdb = imdb[
-        ~imdb["imdb_id"].isin(
-            completed_ids
-        )
-    ].reset_index(drop=True)
-
-    metadata = existing.to_dict("records")
-
-    print(f"Already collected: {len(existing):,}")
-
-    print(f"Remaining movies: {len(imdb):,}")
-
-else : 
-
-    metadata = []
-
-# TMDB Request function 
-
-def get_tmdb_movie(imdb_id): 
-    """
-    Fetch movie metadata from TMDB 
-    using IMDb id 
-    """
-
-    url = f"{TMDB_BASE_URL}/find/{imdb_id}"
+def get_tmdb_id(
+        imdb_id,
+        api_key,
+): 
+    
+    url = (
+        f"https://api.themoviedb.org/3/find/{imdb_id}"
+    )
 
     params = {
-        "api_key": TMDB_API_KEY,
+        "api_key": api_key,
         "external_source": "imdb_id",
     }
 
-    response = requests.get(
+    response = session.get(
         url,
         params=params,
         timeout=30,
@@ -101,15 +76,298 @@ def get_tmdb_movie(imdb_id):
     if response.status_code != 200: 
         return None 
 
-    results = response.json()
+    data = response.json()
 
-    movies = results.get(
-        "movie_results",
-        []
+    if len(data["movie_results"]) == 0: 
+        return None
+
+    return data["movie_results"][0]["id"]
+
+
+def get_movie_details(
+        tmdb_id, 
+        api_key,
+): 
+
+    url = (
+        f"https://api.themoviedb.org/3/movie/{tmdb_id}"
     )
 
-    if len(movies) == 0: 
+    params = {
+        "api_key": api_key
+    }
+
+    reponse = session.get(
+        url,
+        params=params,
+        timeout=30,
+    )
+
+    if reponse.status_code != 200: 
         return None 
 
-    return movies[0]
+    return reponse.json()
 
+def download_poster(
+        imdb_id,
+        poster_path,
+): 
+
+    if not poster_path: 
+        return None 
+
+    poster_url = ( 
+        "https://image.tmdb.org/t/p/original"
+        + poster_path
+    )
+
+    poster_file = (f"{imdb_id}.jpg")
+
+    save_path = (
+        POSTERS_DIR / 
+        poster_file
+    )
+
+    # Skip download if already exists 
+
+    if save_path.exists(): 
+        return poster_file 
+
+    response = session.get(
+        poster_url,
+        timeout=60,
+    )
+
+    if response.status_code != 200:
+        return None 
+
+    with open(
+        save_path,
+        "wb",
+    ) as file: 
+
+        file.write(
+            response.content
+        )
+
+    return poster_file 
+
+# Collect TMDB Metadata 
+
+def collect_tmdb_metadata( 
+        imdb_df,
+        api_key,
+): 
+
+    all_movies = []
+
+    # Resume from checkpoint 
+
+    if CHECKPOINT_FILE.exists(): 
+
+        checkpoint = pd.read_csv(
+            CHECKPOINT_FILE
+        )
+
+        all_movies = checkpoint.to_dict(
+            "records"
+        )
+
+        completed = set(
+            checkpoint["imdb_id"]
+        )
+
+        imdb_df = imdb_df[
+            ~imdb_df["imdb_id"].isin(
+                completed
+            )
+        ].reset_index(drop=True)
+
+        print(
+            f"Resuming from checkpoint "
+            f"({len(completed):,} movies already processed)"
+        )
+
+    # Main Loop 
+
+    for i, imdb_id in enumerate(
+        tqdm(
+            imdb_df["imdb_id"],
+            desc = "Collecting TMDB Metadata"
+        )
+    ): 
+
+        tmdb_id = get_tmdb_id(
+            imdb_id,
+            api_key
+        )
+
+        if tmdb_id is None:
+            continue 
+
+        details = get_movie_details(
+            tmdb_id,
+            api_key
+        )
+
+        if details is None: 
+            continue 
+
+        # Clean complex fields 
+
+        genres = "|".join(
+
+            genre["name"]
+
+            for genre in details.get(
+                "genres",
+                [],
+            )
+        )
+
+        production_companies = "|".join(
+
+            company["name"]
+
+            for company in details.get(
+                "production_companies",
+                [],
+            )
+        )
+
+        production_countries = "|".join(
+
+            country["name"]
+
+            for country in details.get(
+                "production_countries",
+                [],
+            )
+        )
+
+        spoken_languages = "|".join(
+
+            language["english_name"]
+
+            for language in details.get(
+                "spoken_languages",
+                [],
+            )
+        )
+
+        # Downloads Poster 
+
+        poster_file = download_poster(
+
+            imdb_id,
+            details.get(
+                "poster_paht"
+            )
+        )
+
+        # Store Metadata 
+
+        movies_data = {
+            "imdb_id": imdb_id,
+
+            "tmdb_id": details["id"],
+
+            "title": details.get("title"),
+
+            "original_title": details.get("original_title"),
+
+            "overview": details.get("overview"),
+
+            "tagline": details.get("tagline"),
+
+            "poster_path": details.get("poster_path"),
+
+            "poster_file": poster_file,
+
+            "budget": details.get("budget"),
+
+            "revenue": details.get("revenue"),
+
+            "runtime": details.get("runtime"),
+
+            "popularity": details.get("popularity"),
+
+            "release_date": details.get('release_date'),
+
+            "original_language": details.get("original_language"),
+
+            "vote_average": details.get("vote_average"), 
+
+            "vote_count": details.get("vote_count"),
+
+            "genres": genres,
+
+            "production_companies": production_companies,
+
+            "production_countries": production_countries,
+
+            "spoken_languages": spoken_languages,
+        }
+
+        all_movies.append(
+            movies_data
+        )
+
+        # Save checkpoint every 500 movies 
+
+        if ( 
+            len(all_movies) % 500 == 0
+        ): 
+
+            checkpoint = pd.DataFrame(all_movies)
+
+            checkpoint.to_csv(
+                CHECKPOINT_FILE,
+                index = False,
+            )
+
+            print(
+                f"Checkpoint saved",
+                f"({len(all_movies):,} movies)"
+            )
+
+
+    # Final Metadata 
+
+    tmdb_metadata = pd.DataFrame(
+        all_movies
+    )
+
+    tmdb_metadata.to_csv(
+        TMDB_METADATA,
+        index=False,
+    )
+
+    return tmdb_metadata 
+
+# MAIN 
+
+def main(): 
+
+    print("=" * 60) 
+    print("TMDB METADATA COLLECTION")
+    print("=" * 60)
+
+    imdb_movies = pd.read_csv(IMDB_DATASET)
+
+    tmdb_metadata = collect_tmdb_metadata(
+        imdb_movies,
+        TMDB_API_KEY,
+    )
+
+    print(
+        f"\nCollected",
+        f"{len(tmdb_metadata):,} movies."
+    
+    )
+
+    print(f"\nSaved to:\n{TMDB_METADATA}")
+
+if __name__ == "__main__": 
+
+    main()
