@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Root directory containing the dataset 
+# Root directory containing the dataset
+ 
 DATA_ROOT = Path(
     os.getenv("CINEFUSION_DATA_ROOT", "./data")
 ).expanduser().resolve()
