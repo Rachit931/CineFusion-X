@@ -1,20 +1,20 @@
 import os 
 import time 
 
+from pathlib import Path 
+
 import pandas as pd 
-import requests 
+import requests
+from dotenv import load_dotenv
+from tqdm import tqdm 
 
-from dotenv import load_dotenv 
-
-from config.paths import (
+from config.paths import ( 
     IMDB_DIR,
     TMDB_DIR,
     POSTERS_DIR,
 )
 
 # Load Environment Variables 
-
-load_dotenv()
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
@@ -23,72 +23,46 @@ if not TMDB_API_KEY:
         "TMDB_API_KEY not found in .env"
     )
 
-# TMDB URLs
-
-TMDB_BASE_URL = "https://api.themoviedb.org/3"
-
-POSTER_BASE_URL = "https://image.tmdb.org/t/p/original"
-
-# Input / Output Files 
+# Files 
 
 IMDB_DATASET = (
     IMDB_DIR / 
     "imdb_movies_clean.csv"
 )
 
-TMDB_METADATA = ( 
+TMDB_METADATA = (
     TMDB_DIR / 
     "tmdb_metadata.csv"
 )
 
-# Load IMDb dataset 
+CHECKPOINT_FILE = (
+    TMDB_DIR / 
+    "tmdb_metadata_checkpoint.csv"
+)
 
-print("=" * 60)
-print("TMDB DATA COLLECTION")
-print("=" * 60)
+POSTERS_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
-print("\nLoading IMDb dataset...")
+TMDB_DIR.mkdir(
+    parents=True,
+    exist_ok=True,
+)
 
-imdb = pd.read_csv(IMDB_DATASET)
+# TMDB Functions
 
-print(f"Movies loaded: {len(imdb):,}")
-
-# Resume Previous Run 
-
-if TMDB_METADATA.exists(): 
-
-    existing = pd.read_csv(TMDB_METADATA)
-
-    completed_ids = set(existing["imdb_id"])
-
-    imdb = imdb[
-        ~imdb["imdb_id"].isin(
-            completed_ids
-        )
-    ].reset_index(drop=True)
-
-    metadata = existing.to_dict("records")
-
-    print(f"Already collected: {len(existing):,}")
-
-    print(f"Remaining movies: {len(imdb):,}")
-
-else : 
-
-    metadata = []
-
-# TMDB Request function 
-
-def get_tmdb_movie(imdb_id): 
-    """
-    Fetch movie metadata from TMDB 
-    using IMDb id 
-    """
-
-    url = f"{TMDB_BASE_URL}/find/{imdb_id}"
+def get_tmdb_id(
+        imdb_id,
+        api_key,
+): 
+    
+    url = (
+        f"https://api.themoviedb.org/3/find/{imdb_id}"
+    )
 
     params = {
-        "api_key": TMDB_API_KEY,
+        "api_key": api_key,
         "external_source": "imdb_id",
     }
 
@@ -101,15 +75,79 @@ def get_tmdb_movie(imdb_id):
     if response.status_code != 200: 
         return None 
 
-    results = response.json()
+    data = response.json()
 
-    movies = results.get(
-        "movie_results",
-        []
+    if len(data["movie_results"]) == 0: 
+        return None
+
+    return data["movie_results"][0]["id"]
+
+
+def get_movie_details(
+        tmdb_id, 
+        api_key,
+): 
+
+    url = (
+        f"https://api.themoviedb.org/3/movie/{tmdb_id}"
     )
 
-    if len(movies) == 0: 
+    params = {
+        "api_key": api_key
+    }
+
+    reponse = requests.get(
+        url,
+        params=params,
+        timeout=30,
+    )
+
+    if reponse.status_code != 200: 
         return None 
 
-    return movies[0]
+    return reponse.json()
+
+def download_posters(
+        imdb_id,
+        poster_path,
+): 
+
+    if not poster_path: 
+        return None 
+
+    poster_url = ( 
+        "https://image.tmdb.org/t/p/original"
+        + poster_path
+    )
+
+    poster_file = (f"{imdb_id}.jpg")
+
+    save_path = (
+        POSTERS_DIR / 
+        poster_file
+    )
+
+    # Skip download if already exists 
+
+    if save_path.exists(): 
+        return poster_file 
+
+    response = requests.get(
+        poster_url,
+        timeout=60,
+    )
+
+    if response.status_code != 200:
+        return None 
+
+    with open(
+        save_path,
+        "wb",
+    ) as file: 
+
+        file.write(
+            response.content
+        )
+
+    return poster_file 
 
