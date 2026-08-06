@@ -203,7 +203,10 @@ def collect_tmdb_metadata(
         )
 
         if tmdb_id is None:
+            print(f"No TMDB ID: {imdb_id}")
             continue 
+
+        print(f"Found TMDB ID: {tmdb_id}")
 
         details = get_movie_details(
             tmdb_id,
@@ -211,7 +214,10 @@ def collect_tmdb_metadata(
         )
 
         if details is None: 
+            print(f"Failed details: {imdb_id}")
             continue 
+
+        print(f"Got details: {imdb_id}")
 
         # Clean complex fields 
 
@@ -261,7 +267,7 @@ def collect_tmdb_metadata(
 
             imdb_id,
             details.get(
-                "poster_paht"
+                "poster_path"
             )
         )
 
