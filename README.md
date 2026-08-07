@@ -148,6 +148,9 @@ No code changes are required.
 
 ## Option 2 — Build Dataset Yourself
 
+# Link for IMDB Basics and Ratings files
+https://datasets.imdbws.com/
+
 ```text
 IMDb TSV Files
       │

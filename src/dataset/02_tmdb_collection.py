@@ -1,5 +1,6 @@
 import os 
 import time 
+import src.utils as utils
 
 from pathlib import Path 
 
@@ -163,19 +164,11 @@ def collect_tmdb_metadata(
 
     # Resume from checkpoint 
 
-    if CHECKPOINT_FILE.exists(): 
+    checkpoint, completed, all_movies = utils.load_checkpoint(
+        CHECKPOINT_FILE
+    )
 
-        checkpoint = pd.read_csv(
-            CHECKPOINT_FILE
-        )
-
-        all_movies = checkpoint.to_dict(
-            "records"
-        )
-
-        completed = set(
-            checkpoint["imdb_id"]
-        )
+    if checkpoint is not None:
 
         imdb_df = imdb_df[
             ~imdb_df["imdb_id"].isin(
@@ -210,8 +203,9 @@ def collect_tmdb_metadata(
             api_key
         )
 
-        if details is None: 
+        if details is None:
             continue 
+
 
         # Clean complex fields 
 
@@ -261,7 +255,7 @@ def collect_tmdb_metadata(
 
             imdb_id,
             details.get(
-                "poster_paht"
+                "poster_path"
             )
         )
 
@@ -316,14 +310,14 @@ def collect_tmdb_metadata(
         # Save checkpoint every 500 movies 
 
         if ( 
-            len(all_movies) % 500 == 0
+            len(all_movies) % 1 == 0
         ): 
 
             checkpoint = pd.DataFrame(all_movies)
 
-            checkpoint.to_csv(
+            utils.save_checkpoint(
+                checkpoint,
                 CHECKPOINT_FILE,
-                index = False,
             )
 
             print(
@@ -338,9 +332,9 @@ def collect_tmdb_metadata(
         all_movies
     )
 
-    tmdb_metadata.to_csv(
+    utils.save_dataframe(
+        tmdb_metadata,
         TMDB_METADATA,
-        index=False,
     )
 
     return tmdb_metadata 
@@ -349,12 +343,9 @@ def collect_tmdb_metadata(
 
 def main(): 
 
-    print("=" * 60) 
-    print("TMDB METADATA COLLECTION")
-    print("=" * 60)
+    utils.print_section("TMDB_METADATA_COLLECTION")
 
     imdb_movies = pd.read_csv(IMDB_DATASET)
-
     tmdb_metadata = collect_tmdb_metadata(
         imdb_movies,
         TMDB_API_KEY,
