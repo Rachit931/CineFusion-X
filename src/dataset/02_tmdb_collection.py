@@ -310,7 +310,7 @@ def collect_tmdb_metadata(
         # Save checkpoint every 500 movies 
 
         if ( 
-            len(all_movies) % 1 == 0
+            len(all_movies) % 500 == 0
         ): 
 
             checkpoint = pd.DataFrame(all_movies)
