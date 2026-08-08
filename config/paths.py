@@ -29,7 +29,7 @@ IMAGE_DIR = PROCESSED_DIR / "image"
 TEXT_DIR = PROCESSED_DIR / "text"
 TABULAR_DIR = PROCESSED_DIR / "tabular"
 
-MULTIMODEL_DATASET = PROCESSED_DIR / "multimodel_dataset.csv"
+MULTIMODEL_DIR = PROCESSED_DIR / "multimodel_dataset"
 
 CHECKPOINT_DIR = PROCESSED_DIR / "checkpoints"
 
@@ -46,6 +46,7 @@ DIRECTORIES = [
     IMAGE_DIR,
     TEXT_DIR,
     TABULAR_DIR,
+    MULTIMODEL_DIR,
     CHECKPOINT_DIR,
     LOG_DIR,
 ]

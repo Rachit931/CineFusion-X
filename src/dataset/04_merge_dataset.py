@@ -7,7 +7,7 @@ from config.paths import (
     IMDB_DIR,
     TMDB_DIR,
     POSTERS_DIR,
-    MULTIMODEL_DATASET,
+    MULTIMODEL_DIR,
 )
 
 # Files 
@@ -15,6 +15,8 @@ from config.paths import (
 IMDB_DATASET = IMDB_DIR / "imdb_movies_clean.csv"
 
 TMDB_DATASET = TMDB_DIR / "tmdb_metadata.csv"
+
+MULTIMODEL_DATASET = MULTIMODEL_DIR / "multimodel_dataset.csv"
 
 # Merging Datasets
 
