@@ -29,7 +29,7 @@ IMAGE_DIR = PROCESSED_DIR / "image"
 TEXT_DIR = PROCESSED_DIR / "text"
 TABULAR_DIR = PROCESSED_DIR / "tabular"
 
-MULTIMODEL_DIR = PROCESSED_DIR / "multimodel_dataset"
+MULTIMODEL_DIR = PROCESSED_DIR / "multimodel_data"
 
 CHECKPOINT_DIR = PROCESSED_DIR / "checkpoints"
 
