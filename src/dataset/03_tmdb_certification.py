@@ -20,7 +20,7 @@ if not TMDB_API_KEY:
 
 TMDB_METADATA = TMDB_DIR / "tmdb_metadata.csv"
 
-TMDB_METADATA_ENRICHED = TMDB_DIR / "tmdb_metadata_with certi.csv"
+TMDB_METADATA_ENRICHED = TMDB_DIR / "tmdb_metadata_with_certi.csv"
 
 CHECKPOINT_FILE = TMDB_DIR / "tmdb_certi_checkpoint.csv"
 
