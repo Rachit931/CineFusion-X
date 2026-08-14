@@ -7,15 +7,15 @@ import src.utils as utils
 
 from config.paths import (
     EXTERNAL_DIR,
-    RAW_MULTIMODEL_DIR,
-    MULTIMODEL_DIR
+    BASE_DIR,
+    MASTER_MULTIMODEL_DIR
 )
 
 # PATHS 
 
-BASE = RAW_MULTIMODEL_DIR / "multimodel_dataset.csv"
+BASE = BASE_DIR / "multimodel_dataset.csv"
 
-ENRICHED = MULTIMODEL_DIR / "multimodel_dataset_enriched.csv"
+ENRICHED = MASTER_MULTIMODEL_DIR / "multimodel_dataset_enriched.csv"
 
 # COLUMN ALIASES 
 
