@@ -113,7 +113,7 @@ def main():
     # Save content_ratings_dataset
 
     utils.save_dataframe(
-        box_office_df,
+        content_ratings_df,
         CONTENT_RATINGS_DATASET,
     )
 
