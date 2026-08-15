@@ -4,14 +4,19 @@ from pathlib import Path
 import src.utils as utils
 
 from config.paths import ( 
-    MULTIMODEL_DIR
+    BASE_DIR,
+    MASTER_MULTIMODEL_DIR,
+    TASK_HEADS_DIR,
 )
 
-INPUT_DATASET = MULTIMODEL_DIR / "multimodel_dataset_enriched.csv"
+INPUT_DATASET = MASTER_MULTIMODEL_DIR / "multimodel_dataset_enriched.csv"
 
-MASTER_DATASET = MULTIMODEL_DIR / "multimodel_dataset_prepared.csv"
+MASTER_DATASET = MASTER_MULTIMODEL_DIR / "multimodel_dataset_prepared.csv"
 
-BOX_OFFICE_DATASET = MULTIMODEL_DIR / "box_office_dataset.csv"
+BOX_OFFICE_DATASET = TASK_HEADS_DIR / "box_office_dataset.csv"
+
+CONTENT_RATINGS_DATASET = TASK_HEADS_DIR / "content_ratings_dataset.csv"
+
 
 def main():
 
@@ -85,17 +90,44 @@ def main():
         BOX_OFFICE_DATASET
     )
 
+    # 6. Content-rating candidate dataset
+    
+    # Final EDA rule:
+    # Keeping only:
+    # G, PG, PG-13, R
+    
+    # NR    : not an actual rating class
+    # NC-17 : too few examples (204)
+
+    valid_ratings = [
+        "G",
+        "PG",
+        "PG-13",
+        "R",
+    ]
+
+    content_ratings_df = df[
+        df["content_rating"].isin(valid_ratings)
+    ].copy()
+
+    # Save content_ratings_dataset
+
+    utils.save_dataframe(
+        content_ratings_df,
+        CONTENT_RATINGS_DATASET,
+    )
+
     # REPORT 
 
     utils.print_section("PREPARATION RESULTS")
 
-    print(
-        f"Prepared master dataset : {len(df)} rows"
-    )
+    print(f"Prepared master dataset : {len(df)} rows")
+    
 
-    print(
-        f"Box-office dataset      : {len(box_office_df)} rows"
-    )
+    print(f"Box-office dataset      : {len(box_office_df)} rows")
+    
+
+    print(f"Content-rating dataset  : {len(content_ratings_df):,}")
 
     print(
         f"Excluded from box-office: "
@@ -122,6 +154,14 @@ def main():
     print(
         "Missing revenue:",
         box_office_df["revenue"].isna().sum()
+    )
+
+    print("\nContent-rating classes: ")
+
+    print(
+        content_ratings_df["content_rating"]
+        .value_counts()
+        .to_string()
     )
 
     print("\nSaved:")
