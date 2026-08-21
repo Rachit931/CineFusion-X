@@ -2,40 +2,33 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.utils import print_section, save_dataframe
+import src.utils as utils
+
+from config.paths import(
+    TARGETS_DIR,
+    S_BOX_OFFICE_SPLIT_DIR,
+    S_CONTENT_RATING_DIR,
+    S_GENERAL_DIR
+)
 
 
 # ============================================================
 # PATHS
 # ============================================================
 
-DATA_DIR = Path("../data")
-
-TARGET_DIR = (
-    DATA_DIR
-    / "processed"
-    / "targets"
-)
-
-SPLIT_DIR = (
-    DATA_DIR
-    / "processed"
-    / "splits"
-)
-
 MASTER_FILE = (
-    TARGET_DIR
-    / "multimodal_dataset_targets.csv"
+    TARGETS_DIR 
+    / "multimodel_dataset_targets.csv"
 )
 
 BOX_OFFICE_FILE = (
-    TARGET_DIR
+    TARGETS_DIR
     / "box_office_targets.csv"
 )
 
 CONTENT_RATING_FILE = (
-    TARGET_DIR
-    / "content_rating_targets.csv"
+    TARGETS_DIR
+    / "content_ratings_targets.csv"
 )
 
 
@@ -52,12 +45,7 @@ CUTOFF_YEAR = 2019
 
 def main():
 
-    print_section("CHRONOLOGICAL DATASET SPLIT")
-
-    SPLIT_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    utils.print_section("CHRONOLOGICAL DATASET SPLIT")
 
     # ========================================================
     # 1. LOAD DATASETS
@@ -246,49 +234,49 @@ def main():
     # 9. SAVE MASTER SPLITS
     # ========================================================
 
-    save_dataframe(
+    utils.save_dataframe(
         master_development,
-        SPLIT_DIR / "master_development.csv"
+        S_GENERAL_DIR / "master_development.csv"
     )
 
-    save_dataframe(
+    utils.save_dataframe(
         master_test,
-        SPLIT_DIR / "master_test.csv"
+        S_GENERAL_DIR / "master_test.csv"
     )
 
     # ========================================================
     # 10. SAVE BOX-OFFICE SPLITS
     # ========================================================
 
-    save_dataframe(
+    utils.save_dataframe(
         box_office_development,
-        SPLIT_DIR / "box_office_development.csv"
+        S_BOX_OFFICE_SPLIT_DIR / "box_office_development.csv"
     )
 
-    save_dataframe(
+    utils.save_dataframe(
         box_office_test,
-        SPLIT_DIR / "box_office_test.csv"
+        S_BOX_OFFICE_SPLIT_DIR / "box_office_test.csv"
     )
 
     # ========================================================
     # 11. SAVE CONTENT-RATING SPLITS
     # ========================================================
 
-    save_dataframe(
+    utils.save_dataframe(
         content_rating_development,
-        SPLIT_DIR / "content_rating_development.csv"
+        S_CONTENT_RATING_DIR / "content_rating_development.csv"
     )
 
-    save_dataframe(
+    utils.save_dataframe(
         content_rating_test,
-        SPLIT_DIR / "content_rating_test.csv"
+        S_CONTENT_RATING_DIR / "content_rating_test.csv"
     )
 
     # ========================================================
     # 12. TARGET DISTRIBUTION CHECKS
     # ========================================================
 
-    print_section("POST-SPLIT TARGET CHECK")
+    utils.print_section("POST-SPLIT TARGET CHECK")
 
     # --------------------------------------------------------
     # Box office
@@ -406,7 +394,7 @@ def main():
     # 13. FINAL VALIDATION
     # ========================================================
 
-    print_section("SPLIT VALIDATION")
+    utils.print_section("SPLIT VALIDATION")
 
     print(
         "Master development rows:",
@@ -460,7 +448,7 @@ def main():
     print("✓ Same movie-level split applied to all task datasets.")
     print("✓ 5-fold CV will be performed later on development only.")
 
-    print_section("SPLIT COMPLETE")
+    utils.print_section("SPLIT COMPLETE")
 
 
 if __name__ == "__main__":
