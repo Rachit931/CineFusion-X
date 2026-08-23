@@ -13,6 +13,10 @@ DATA_ROOT = Path(
     os.getenv("CINEFUSION_DATA_ROOT", "./data")
 ).expanduser().resolve()
 
+PROJECT_ROOT = Path(
+    os.getenv("PROJECT_ROOT")
+).expanduser().resolve()
+
 # RAW DATA 
 
 RAW_DIR = DATA_ROOT / "raw"
@@ -52,6 +56,12 @@ GENERAL_DIR = FEATURE_DIR / "general"
 
 LOG_DIR = DATA_ROOT / "logs"
 
+# ARTIFACTS
+
+ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
+
+PREPROCESSOR_DIR = ARTIFACTS_DIR / "preprocessor"
+
 # Automatically create folders 
 
 DIRECTORIES = [
@@ -73,6 +83,7 @@ DIRECTORIES = [
     CHECKPOINT_DIR,
     FEATURE_DIR,
     LOG_DIR,
+    PREPROCESSOR_DIR,
 ]
 
 for directory in DIRECTORIES: 

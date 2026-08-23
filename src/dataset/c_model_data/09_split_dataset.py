@@ -11,10 +11,7 @@ from config.paths import(
     S_GENERAL_DIR
 )
 
-
-# ============================================================
 # PATHS
-# ============================================================
 
 MASTER_FILE = (
     TARGETS_DIR 
@@ -32,24 +29,21 @@ CONTENT_RATING_FILE = (
 )
 
 
-# ============================================================
 # SPLIT SETTINGS
-# ============================================================
+
 
 CUTOFF_YEAR = 2019
 
 
-# ============================================================
 # MAIN
-# ============================================================
 
 def main():
 
     utils.print_section("CHRONOLOGICAL DATASET SPLIT")
 
-    # ========================================================
+    # ==
     # 1. LOAD DATASETS
-    # ========================================================
+    # ==
 
     master = pd.read_csv(
         MASTER_FILE,
@@ -70,9 +64,9 @@ def main():
     print(f"Box-office rows: {len(box_office):,}")
     print(f"Content-rating rows: {len(content_rating):,}")
 
-    # ========================================================
+
     # 2. VALIDATE REQUIRED COLUMNS
-    # ========================================================
+    
 
     required_master = {
         "imdb_id",
@@ -115,9 +109,9 @@ def main():
             f"Content-rating dataset missing columns: {missing}"
         )
 
-    # ========================================================
+    
     # 3. CLEAN SPLIT KEYS
-    # ========================================================
+    
 
     for df in [
         master,
@@ -142,9 +136,9 @@ def main():
         & master["release_year"].notna()
     ].copy()
 
-    # ========================================================
+    
     # 4. CREATE ONE MOVIE-LEVEL SPLIT
-    # ========================================================
+    
 
     development_ids = set(
         master.loc[
@@ -160,9 +154,9 @@ def main():
         ]
     )
 
-    # ========================================================
+    
     # 5. CHECK FOR DATA LEAKAGE
-    # ========================================================
+    
 
     overlap = development_ids.intersection(
         test_ids
@@ -194,9 +188,9 @@ def main():
         f"{len(test_ids) / len(master) * 100:.2f}%"
     )
 
-    # ========================================================
+    
     # 6. APPLY SAME SPLIT TO MASTER
-    # ========================================================
+    
 
     master_development = master[
         master["imdb_id"].isin(development_ids)
@@ -206,9 +200,9 @@ def main():
         master["imdb_id"].isin(test_ids)
     ].copy()
 
-    # ========================================================
+    
     # 7. APPLY SAME SPLIT TO BOX OFFICE
-    # ========================================================
+    
 
     box_office_development = box_office[
         box_office["imdb_id"].isin(development_ids)
@@ -218,9 +212,9 @@ def main():
         box_office["imdb_id"].isin(test_ids)
     ].copy()
 
-    # ========================================================
+
     # 8. APPLY SAME SPLIT TO CONTENT RATING
-    # ========================================================
+    
 
     content_rating_development = content_rating[
         content_rating["imdb_id"].isin(development_ids)
@@ -230,9 +224,9 @@ def main():
         content_rating["imdb_id"].isin(test_ids)
     ].copy()
 
-    # ========================================================
+    
     # 9. SAVE MASTER SPLITS
-    # ========================================================
+    
 
     utils.save_dataframe(
         master_development,
@@ -244,9 +238,9 @@ def main():
         S_GENERAL_DIR / "master_test.csv"
     )
 
-    # ========================================================
+    
     # 10. SAVE BOX-OFFICE SPLITS
-    # ========================================================
+    
 
     utils.save_dataframe(
         box_office_development,
@@ -258,9 +252,9 @@ def main():
         S_BOX_OFFICE_SPLIT_DIR / "box_office_test.csv"
     )
 
-    # ========================================================
+    
     # 11. SAVE CONTENT-RATING SPLITS
-    # ========================================================
+    
 
     utils.save_dataframe(
         content_rating_development,
@@ -272,15 +266,15 @@ def main():
         S_CONTENT_RATING_DIR / "content_rating_test.csv"
     )
 
-    # ========================================================
+    
     # 12. TARGET DISTRIBUTION CHECKS
-    # ========================================================
+    
 
     utils.print_section("POST-SPLIT TARGET CHECK")
 
-    # --------------------------------------------------------
+
     # Box office
-    # --------------------------------------------------------
+
 
     print("BOX OFFICE — DEVELOPMENT")
 
@@ -304,9 +298,9 @@ def main():
         .round(2)
     )
 
-    # --------------------------------------------------------
+
     # Content rating
-    # --------------------------------------------------------
+
 
     print("\nCONTENT RATING — DEVELOPMENT")
 
@@ -330,9 +324,9 @@ def main():
         .round(2)
     )
 
-    # --------------------------------------------------------
+
     # Rating
-    # --------------------------------------------------------
+
 
     print("\nRATING — DEVELOPMENT")
 
@@ -350,9 +344,9 @@ def main():
         ].describe()
     )
 
-    # --------------------------------------------------------
+
     # Genre
-    # --------------------------------------------------------
+
 
     development_genres = (
         master_development[
@@ -390,9 +384,9 @@ def main():
         test_genres.head(10)
     )
 
-    # ========================================================
+    
     # 13. FINAL VALIDATION
-    # ========================================================
+    
 
     utils.print_section("SPLIT VALIDATION")
 
