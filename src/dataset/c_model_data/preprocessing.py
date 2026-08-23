@@ -9,7 +9,7 @@ from sklearn.preprocessing import (
     StandardScaler,
 )
 
-from config.paths import PREPROCESSORS_DIR
+from config.paths import PREPROCESSOR_DIR
 
 # FINAL FEATURE CONFIG 
 
