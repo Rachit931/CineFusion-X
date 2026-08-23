@@ -387,11 +387,26 @@ class TabularPreprocessor:
         )
 
         # PRODUCTION COUNTRIES
-        
-        countries = self.country_encoder.transform(
-            data["production_countries_list"].tolist()
+
+        known_countries = set(
+            self.country_encoder.classes_
         )
 
+        country_lists = []
+
+        for values in data["production_countries_list"]:
+            filtered = []
+
+            for country in values:
+                if country in known_countries:
+                    filtered.append(country)
+
+            country_lists.append(filtered)
+
+        countries = self.country_encoder.transform(
+            country_lists
+        )
+      
         country_names = [
             f"country_{name}"
             for name in self.country_encoder.classes_
@@ -410,9 +425,25 @@ class TabularPreprocessor:
 
         # SPOKEN LANGUAGES 
 
+        known_languages = set(
+            self.spoken_language_encoder.classes_
+        )
+
+        spoken_lists = []
+
+        for values in data["spoken_languages_list"]:
+
+            filtered = []
+
+            for language in values:
+                if language in known_languages:
+                    filtered.append(language)
+
+            spoken_lists.append(filtered)
+
         spoken_languages = (
             self.spoken_language_encoder.transform(
-                data["spoken_languages_list"].tolist()
+                spoken_lists
             )
         )
 
