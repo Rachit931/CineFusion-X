@@ -159,6 +159,10 @@ def featurize_dataset(
         )
     )
 
+    training_features.insert(0, "imdb_id", training["imdb_id"].values)
+
+    test_features.insert(0, "imdb_id", test["imdb_id"].values)
+    
     # Save processed training DataFrame
 
     training_features.to_csv(
