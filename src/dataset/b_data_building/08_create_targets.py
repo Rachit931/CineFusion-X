@@ -136,7 +136,6 @@ def create_genre_target(df):
 
     return df
 
-
 def main():
 
     utils.print_section("CREATE TARGETS")
@@ -147,6 +146,8 @@ def main():
         MASTER_DATASET,
         low_memory=False
     )
+
+    master = master.copy()
 
     print(f"Prepared master rows: {len(master):,}")
 
@@ -161,13 +162,6 @@ def main():
     master = create_genre_target(master)
 
     print("Missing genre target: ", master["genre_target"].isna().sum())
-
-    # Saving Master targets
-
-    utils.save_dataframe(
-        master,
-        MASTER_TARGET
-    )
 
     # Content-Rating target 
 
@@ -202,9 +196,17 @@ def main():
         ).round(2)
     )
 
-    utils.save_dataframe(
-        content_rating,
-        CONTENT_RATINGS_TARGET
+    # Add content rating target to MASTER
+
+    master = master.merge(
+        content_rating[
+            [
+                "imdb_id",
+                "content_rating_target"
+            ]
+        ],
+        on = "imdb_id",
+        how = "left",
     )
 
     # Box-Office target 
@@ -240,11 +242,34 @@ def main():
         ).round(2)
     )
 
+    # Add box office target
+    master = master.merge(
+        box_office[
+            [
+                "imdb_id",
+                "box_office_target",
+            ]
+        ],
+        on = "imdb_id",
+        how = "left"
+    )
+    # Save target datasets 
+
+    utils.save_dataframe(
+        master,
+        MASTER_TARGET
+    )
+
+    utils.save_dataframe(
+        content_rating,
+        CONTENT_RATINGS_TARGET
+    )  
+
     utils.save_dataframe(
         box_office,
         BOX_OFFICE_TARGET
     )
-
+    
     # Summary 
 
     utils.print_section("TARGET CREATION COMPLETE")
