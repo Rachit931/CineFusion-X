@@ -98,6 +98,8 @@ FEATURE_COLUMNS = [
     "production_companies",
 ]
 
+TEXT_COLUMN = "overview"
+
 TARGET_COLUMNS = [
     "genre_target",
     "rating_target",
@@ -130,15 +132,6 @@ def featurize_dataset(
         test_path,
         low_memory=False,
     )
-
-    print("TRAIN COLUMNS:")
-    print(training.columns.tolist())
-
-    print("\nTEST COLUMNS:")
-    print(test.columns.tolist())
-
-    print("\nTARGET COLUMNS:")
-    print(TARGET_COLUMNS)
 
     # Select only the raw tabular features
 
@@ -173,6 +166,9 @@ def featurize_dataset(
     for column in TARGET_COLUMNS:
         training_features[column] = training[column].values
 
+    # Add overview
+    training_features[TEXT_COLUMN] = training[TEXT_COLUMN].values
+
 
     # TRANSFORM TEST USING THE SAME PREPROCESSOR
 
@@ -189,7 +185,10 @@ def featurize_dataset(
     for column in TARGET_COLUMNS:
         test_features[column] = test[column].values
 
-    
+    # Adding overview 
+    test_features[TEXT_COLUMN] = test[TEXT_COLUMN].values
+
+        
     # Save processed training DataFrame
 
     training_features.to_csv(
