@@ -57,12 +57,12 @@ BOX_OFFICE_TEST = (
 
 GENERAL_TRAIN_FEATURES = (
     GENERAL_DIR
-    / "general_training.csv"
+    / "master_training.csv"
 )
 
 GENERAL_TEST_FEATURES = (
     GENERAL_DIR
-    / "general_test.csv"
+    / "master_test.csv"
 )
 
 CONTENT_RATING_TRAIN_FEATURES = (
@@ -98,6 +98,13 @@ FEATURE_COLUMNS = [
     "production_companies",
 ]
 
+TARGET_COLUMNS = [
+    "genre_target",
+    "rating_target",
+    "box_office_target",
+    "content_rating_target",
+]
+
 # FEATURIZE ONE DATASET 
 
 def featurize_dataset(
@@ -105,7 +112,6 @@ def featurize_dataset(
     test_path,
     training_output,
     test_output,
-    task,
 ): 
     """
     Fit the preprocessor on training data only,
@@ -125,6 +131,15 @@ def featurize_dataset(
         low_memory=False,
     )
 
+    print("TRAIN COLUMNS:")
+    print(training.columns.tolist())
+
+    print("\nTEST COLUMNS:")
+    print(test.columns.tolist())
+
+    print("\nTARGET COLUMNS:")
+    print(TARGET_COLUMNS)
+
     # Select only the raw tabular features
 
     training_input = training[
@@ -143,7 +158,7 @@ def featurize_dataset(
 
     preprocessor.fit(training_input)
 
-    # Transform training 
+    # TRANSFORM TRAINING
 
     training_features = (
         preprocessor.transform(
@@ -151,7 +166,15 @@ def featurize_dataset(
         )
     )
 
-    # Transform test using SAME preprocessor 
+    # Adding the targets 
+    training_features.insert(0, "imdb_id", training["imdb_id"].values)
+
+    # Add targets 
+    for column in TARGET_COLUMNS:
+        training_features[column] = training[column].values
+
+
+    # TRANSFORM TEST USING THE SAME PREPROCESSOR
 
     test_features = (
         preprocessor.transform(
@@ -159,9 +182,13 @@ def featurize_dataset(
         )
     )
 
-    training_features.insert(0, "imdb_id", training["imdb_id"].values)
-
+    # Adding the targets for model evaluation
     test_features.insert(0, "imdb_id", test["imdb_id"].values)
+
+    # Add targets for evaluation
+    for column in TARGET_COLUMNS:
+        test_features[column] = test[column].values
+
     
     # Save processed training DataFrame
 
@@ -182,13 +209,12 @@ def featurize_dataset(
     save_preprocessor(
         preprocessor,
         PREPROCESSOR_DIR 
-        / f"{task}_preprocessor.joblib",
+        / "preprocessor.joblib",
     )
 
     # Print Result 
 
     print(
-        f"{task}"
         f"training = {training_features.shape}, "
         f"test = {test_features.shape}"
     )
@@ -206,27 +232,6 @@ def main():
         test_path=GENERAL_TEST,
         training_output=GENERAL_TRAIN_FEATURES,
         test_output=GENERAL_TEST_FEATURES,
-        task="general",
-    )
-
-    # CONTENT RATING
-
-    featurize_dataset(
-        training_path=CONTENT_RATING_TRAIN,
-        test_path=CONTENT_RATING_TEST,
-        training_output=CONTENT_RATING_TRAIN_FEATURES,
-        test_output=CONTENT_RATING_TEST_FEATURES,
-        task="content_rating",
-    )
-
-    # BOX OFFICE 
-
-    featurize_dataset(
-        training_path=BOX_OFFICE_TRAIN,
-        test_path=BOX_OFFICE_TEST,
-        training_output=BOX_OFFICE_TRAIN_FEATURES,
-        test_output=BOX_OFFICE_TEST_FEATURES,
-        task="box_office",
     )
 
     print(
