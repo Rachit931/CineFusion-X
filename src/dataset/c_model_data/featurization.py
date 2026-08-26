@@ -100,8 +100,7 @@ FEATURE_COLUMNS = [
 
 TEXT_COLUMN = "overview"
 
-TARGET_COLUMNS = [
-    "genre_target",
+BASE_TARGET_COLUMNS = [
     "rating_target",
     "box_office_target",
     "content_rating_target",
@@ -133,6 +132,28 @@ def featurize_dataset(
         low_memory=False,
     )
 
+    # Fidn genre target columns 
+
+    genre_target_columns = [
+        column 
+        for column in training.columns
+        if column.startswith("genre_")
+        and column.endswith("_target")
+    ]
+
+    if len(genre_target_columns) != 19: 
+        raise ValueError(
+            f"Expected 19 genre target columns, "
+            f"found{len(genre_target_columns)}"
+        )
+
+    # ALL target columns 
+
+    target_columnns = [
+        *genre_target_columns,
+        *BASE_TARGET_COLUMNS
+    ]
+
     # Select only the raw tabular features
 
     training_input = training[
@@ -163,7 +184,7 @@ def featurize_dataset(
     training_features.insert(0, "imdb_id", training["imdb_id"].values)
 
     # Add targets 
-    for column in TARGET_COLUMNS:
+    for column in target_columnns:
         training_features[column] = training[column].values
 
     # Add overview
@@ -182,7 +203,7 @@ def featurize_dataset(
     test_features.insert(0, "imdb_id", test["imdb_id"].values)
 
     # Add targets for evaluation
-    for column in TARGET_COLUMNS:
+    for column in target_columnns:
         test_features[column] = test[column].values
 
     # Adding overview 

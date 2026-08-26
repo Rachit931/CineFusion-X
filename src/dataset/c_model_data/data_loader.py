@@ -68,3 +68,12 @@ train_loader = DataLoader(
     pin_memory=True,
     persistent_workers=True,
 )   
+
+test_loader = DataLoader(
+    test_dataset,
+    batch_size=20,
+    shuffle=True,
+    num_workers=8,
+    pin_memory=True,
+    persistent_workers=True,
+)
