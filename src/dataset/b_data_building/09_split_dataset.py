@@ -60,13 +60,28 @@ def main():
         low_memory=False
     )
 
+    # Find genre target columns
+
+    genre_target_columns = [
+        column
+        for column in master.columns
+        if column.startswith("genre_")
+        and column.endswith("_target")
+    ]
+
+    if len(genre_target_columns) != 19:
+        raise ValueError(
+            f"Expected 19 genre target columns, "
+            f"found {len(genre_target_columns)}"
+        )
+
+    
     print(f"Master rows: {len(master):,}")
     print(f"Box-office rows: {len(box_office):,}")
     print(f"Content-rating rows: {len(content_rating):,}")
 
 
     # 2. VALIDATE REQUIRED COLUMNS
-    
 
     required_master = {
         "imdb_id",
@@ -347,29 +362,20 @@ def main():
 
     # Genre
 
-
     development_genres = (
         master_development[
-            "genre_target"
+            genre_target_columns
         ]
-        .dropna()
-        .astype("string")
-        .str.split("|")
-        .explode()
-        .str.strip()
-        .value_counts()
+        .sum()
+        .sort_values(ascending=False)
     )
 
     test_genres = (
         master_test[
-            "genre_target"
+            genre_target_columns
         ]
-        .dropna()
-        .astype("string")
-        .str.split("|")
-        .explode()
-        .str.strip()
-        .value_counts()
+        .sum()
+        .sort_values(ascending=False)
     )
 
     print("\nGENRE — DEVELOPMENT")
