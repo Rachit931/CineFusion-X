@@ -15,7 +15,7 @@ class MovieDataset(Dataset):
     def __init__(
         self,
         master_path,
-        vit_image_preprocessor,
+        vit_image_transform,
         bert_tokenizer,
         poster_dir,
         max_text_length = 512,
@@ -28,7 +28,7 @@ class MovieDataset(Dataset):
         )
 
         # Store Preprocessors
-        self.image_processor = vit_image_preprocessor
+        self.image_processor = vit_image_transform
         self.tokenizer = bert_tokenizer,
         self.poster_dir = POSTERS_DIR,
 
@@ -117,10 +117,9 @@ class MovieDataset(Dataset):
         ).convert("RGB")
 
         # Process images for ViT
-        pixel_values = self.vit_image_preprocessor(
-            image=image,
-            return_tensors="pt",
-        )["pixel_values"].squeeze(0)
+        pixel_values = self.vit_image_transform(
+            image
+        )
 
         # BERT inputs 
         input_ids = self.input_ids[index]
