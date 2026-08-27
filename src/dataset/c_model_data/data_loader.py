@@ -1,9 +1,6 @@
 from torch.utils.data import DataLoader
 
-from torchvision.models import (
-    vit_b_16,
-    ViT_B_16_Weights,
-)
+import timm 
 
 from transformers import AutoTokenizer
 from src.dataset.c_model_data.custom_dataset import (
@@ -18,23 +15,30 @@ from config.paths import (
 MASTER_TRAIN = GENERAL_DIR / "master_training.csv"
 MASTER_TEST = GENERAL_DIR / "master_test.csv"
 
-# ViT weights of that particular model
+# MIM-pretrained ViT-B/16
+VIT_MODEL = "vit_base"
 
-VIT_WEIGHTS = (
-    ViT_B_16_Weights.DEFAULT
+vit_model = timm.create_model(
+    VIT_MODEL,
+    prtrained=True,
+    num_classes=0,
 )
 
-# Preprocessing required for the image to be given input into our ViT
+# Expected prprocessing for image as per the model chosen 
+vit_data_config = timm.data.resolve_model_data_config(
+    vit_model
+)
 
-vit_image_transform = VIT_WEIGHTS.transforms()
-
+vit_image_transform = timm.data.create_transform(
+    **vit_data_config,
+    is_training=False,
+)
 
 # Creating BERT's tokenizer by loading it from the pretrained model 
-
 BERT_MODEL = "bert-base-uncased"
 
-# And loads all the preprocessing required for the text to be given input into our BERT
-
+# And loads all the processing required for the text to be given input into our BERT
+# by applying BERT's tokenizers as processing 
 bert_tokenizer = AutoTokenizer.from_pretrained(
     BERT_MODEL
 )
