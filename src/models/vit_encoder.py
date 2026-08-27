@@ -34,3 +34,5 @@ class ViTEncoder(nn.Module):
         visual_embedding = self.projection(
             visual_features
         )
+
+        return visual_embedding
