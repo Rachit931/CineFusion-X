@@ -16,11 +16,11 @@ MASTER_TRAIN = GENERAL_DIR / "master_training.csv"
 MASTER_TEST = GENERAL_DIR / "master_test.csv"
 
 # MIM-pretrained ViT-B/16
-VIT_MODEL = "vit_base"
+VIT_MODEL = "vit_base_patch16_224.mae"
 
 vit_model = timm.create_model(
     VIT_MODEL,
-    prtrained=True,
+    pretrained=True,
     num_classes=0,
 )
 
@@ -76,7 +76,7 @@ train_loader = DataLoader(
 test_loader = DataLoader(
     test_dataset,
     batch_size=20,
-    shuffle=True,
+    shuffle=False,
     num_workers=8,
     pin_memory=True,
     persistent_workers=True,
