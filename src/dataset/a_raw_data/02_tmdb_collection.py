@@ -13,6 +13,7 @@ from config.paths import (
     IMDB_DIR,
     TMDB_DIR,
     POSTERS_DIR,
+    CHECKPOINT_DIR,
 )
 
 session = requests.Session()
@@ -38,7 +39,7 @@ TMDB_METADATA = (
 )
 
 CHECKPOINT_FILE = (
-    TMDB_DIR / 
+    CHECKPOINT_DIR / 
     "tmdb_metadata_checkpoint.csv"
 )
 

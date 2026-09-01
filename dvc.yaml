@@ -1,0 +1,134 @@
+stages:
+
+  imdb_preprocessing:
+    cmd: PYTHONPATH=. python src/dataset/a_raw_data/01_imdb_preprocessing.py
+    deps:
+      - src/dataset/a_raw_data/01_imdb_preprocessing.py
+      - src/utils.py
+      - config/paths.py
+      - data/raw/imdb/title.basics.tsv
+      - data/raw/imdb/title.ratings.tsv
+    outs:
+      - data/raw/imdb/imdb_movies_clean.csv
+
+
+  tmdb_collection:
+    cmd: PYTHONPATH=. python src/dataset/a_raw_data/02_tmdb_collection.py
+    deps:
+      - src/dataset/a_raw_data/02_tmdb_collection.py
+      - src/utils.py
+      - config/paths.py
+      - data/raw/imdb/imdb_movies_clean.csv
+    outs:
+      - data/raw/tmdb/tmdb_metadata.csv
+      - data/raw/tmdb/tmdb_metadata_checkpoint.csv
+      - data/raw/posters
+
+
+  tmdb_certification:
+    cmd: PYTHONPATH=. python src/dataset/a_raw_data/03_tmdb_certification.py
+    deps:
+      - src/dataset/a_raw_data/03_tmdb_certification.py
+      - src/utils.py
+      - config/paths.py
+      - data/raw/tmdb/tmdb_metadata.csv
+    outs:
+      - data/raw/tmdb/tmdb_metadata_with_certi.csv
+      - data/raw/tmdb/tmdb_certi_checkpoint.csv
+
+
+  validate_tmdb:
+    cmd: PYTHONPATH=. python src/dataset/a_raw_data/04_validate_tmdb.py
+    deps:
+      - src/dataset/a_raw_data/04_validate_tmdb.py
+      - src/utils.py
+      - config/paths.py
+      - data/raw/tmdb/tmdb_metadata.csv
+      - data/raw/posters
+    outs: 
+      - data/processed/checkpoints/tmdb_validation_complete.txt
+
+  merge_dataset:
+    cmd: PYTHONPATH=. python src/dataset/b_data_building/05_merge_dataset.py
+    deps:
+      - src/dataset/b_data_building/05_merge_dataset.py
+      - src/utils.py
+      - config/paths.py
+      - data/raw/imdb/imdb_movies_clean.csv
+      - data/raw/tmdb/tmdb_metadata_with_certi.csv
+      - data/raw/posters
+    outs:
+      - data/processed/interim/multimodel_dataset.csv
+
+
+  financial_enrichment:
+    cmd: PYTHONPATH=. python src/dataset/b_data_building/06_financial_enrichment.py
+    deps:
+      - src/dataset/b_data_building/06_financial_enrichment.py
+      - src/utils.py
+      - config/paths.py
+      - data/processed/interim/multimodel_dataset.csv
+      - data/raw/external
+    outs:
+      - data/processed/master/multimodel_dataset_enriched.csv
+
+
+  prepare_dataset:
+    cmd: PYTHONPATH=. python src/dataset/b_data_building/07_prepare_dataset.py
+    deps:
+      - src/dataset/b_data_building/07_prepare_dataset.py
+      - src/utils.py
+      - config/paths.py
+      - data/processed/master/multimodel_dataset_enriched.csv
+    outs:
+      - data/processed/master/multimodel_dataset_prepared.csv
+      - data/processed/tasks/box_office_dataset.csv
+      - data/processed/tasks/content_ratings_dataset.csv
+
+
+  create_targets:
+    cmd: PYTHONPATH=. python src/dataset/b_data_building/08_create_targets.py
+    deps:
+      - src/dataset/b_data_building/08_create_targets.py
+      - src/utils.py
+      - config/paths.py
+      - data/processed/master/multimodel_dataset_prepared.csv
+      - data/processed/tasks/box_office_dataset.csv
+      - data/processed/tasks/content_ratings_dataset.csv
+    outs:
+      - data/processed/targets/multimodel_dataset_targets.csv
+      - data/processed/targets/box_office_targets.csv
+      - data/processed/targets/content_ratings_targets.csv
+
+
+  split_dataset:
+    cmd: PYTHONPATH=. python src/dataset/b_data_building/09_split_dataset.py
+    deps:
+      - src/dataset/b_data_building/09_split_dataset.py
+      - src/utils.py
+      - config/paths.py
+      - data/processed/targets/multimodel_dataset_targets.csv
+      - data/processed/targets/box_office_targets.csv
+      - data/processed/targets/content_ratings_targets.csv
+    outs:
+      - data/processed/splits/general/master_development.csv
+      - data/processed/splits/general/master_test.csv
+      - data/processed/splits/box_office/box_office_development.csv
+      - data/processed/splits/box_office/box_office_test.csv
+      - data/processed/splits/content_rating/content_rating_development.csv
+      - data/processed/splits/content_rating/content_rating_test.csv
+
+
+  featurization:
+    cmd: PYTHONPATH=. python src/dataset/c_model_data/featurization.py
+    deps:
+      - src/dataset/c_model_data/featurization.py
+      - src/dataset/c_model_data/preprocessing.py
+      - src/utils.py
+      - config/paths.py
+      - data/processed/splits/general/master_development.csv
+      - data/processed/splits/general/master_test.csv
+    outs:
+      - data/features/general/master_training.csv
+      - data/features/general/master_test.csv
+      - artifacts/preprocessor/preprocessor.joblib
