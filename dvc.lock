@@ -1,0 +1,30 @@
+schema: '2.0'
+stages:
+  imdb_preprocessing:
+    cmd: PYTHONPATH=. python src/dataset/a_raw_data/01_imdb_preprocessing.py
+    deps:
+    - path: config/paths.py
+      hash: md5
+      md5: b838e29b8310d3e410527bad8276a5cf
+      size: 1801
+    - path: data/raw/imdb/title.basics.tsv
+      hash: md5
+      md5: 3bf0a5b5ae083e98e66b50a82b8a631d
+      size: 1095650562
+    - path: data/raw/imdb/title.ratings.tsv
+      hash: md5
+      md5: 3de7d526a4b87a20feb3cd6e0f1cdf80
+      size: 29565871
+    - path: src/dataset/a_raw_data/01_imdb_preprocessing.py
+      hash: md5
+      md5: a81594380a982a3b1ed806b4d9148ce8
+      size: 3172
+    - path: src/utils.py
+      hash: md5
+      md5: beaa9b3f2aa51fb42af92b2c4607536f
+      size: 1204
+    outs:
+    - path: data/raw/imdb/imdb_movies_clean.csv
+      hash: md5
+      md5: a39bfb1ef5f84a836122113cd7d94f5c
+      size: 7005784

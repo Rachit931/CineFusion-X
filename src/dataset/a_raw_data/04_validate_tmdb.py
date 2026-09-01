@@ -7,12 +7,12 @@ import src.utils as utils
 from config.paths import (
     TMDB_DIR, 
     POSTERS_DIR,
+    CHECKPOINT_DIR
 )
 
-TMDB_METADATA = (
-    TMDB_DIR / "tmdb_metadata.csv"
-)
+TMDB_METADATA = TMDB_DIR / "tmdb_metadata.csv"
 
+VALIDATION_MARKER = CHECKPOINT_DIR / "tmdb_validation_complete.txt"
 
 def validate_duplicates(metadata):
 
@@ -124,6 +124,9 @@ def main():
 
     validate_null_posters(metadata)
 
+    with open(VALIDATION_MARKER, "w") as file: 
+        file.write("TMDB validation successfully completled \n")
+        
     print("\nValidation completed.")
 
 if __name__ == "__main__": 

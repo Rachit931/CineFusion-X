@@ -166,8 +166,6 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-uv.lock
-reflex.lock 
 
 # Spyder project settings
 .spyderproject
