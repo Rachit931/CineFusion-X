@@ -6,7 +6,7 @@ class ViTEncoder(nn.Module):
     MAE-pretarined ViT-B/16 encoder 
     """
 
-    def __init__(self, output_dim=256):
+    def __init__(self,output_dim):
         super().__init__()
 
         # Loading MAE-pretrained ViT-B/16 
