@@ -56,6 +56,12 @@ class MultiModalAttention(nn.Module):
             dropout
         )
 
+        # Adding parameters, giving identity(distinctino) to 
+        # each modality for the cross attention 
+        self.vis_type = nn.Parameter(torch.randn(1, embedding_dim))
+        self.text_type = nn.Parameter(torch.randn(1, embedding_dim))
+        self.tab_type = nn.Parameter(torch.randn(1, embedding_dim))
+
     def forward(
         self,
         visual_embedding,
@@ -78,6 +84,12 @@ class MultiModalAttention(nn.Module):
                 [batch_size, 256]
         """
 
+        # Adding modality(distinction for modality) embedding 
+        # with the embeddings of the modality itself
+        visual_embedding = visual_embedding + self.vis_type
+        textual_embedding = textual_embedding + self.text_type
+        tabular_embedding = tabular_embedding + self.tab_type
+        
         # Creating the multimodality sequence
         modality_token = torch.stack(
             [
@@ -89,7 +101,7 @@ class MultiModalAttention(nn.Module):
         )
 
         # Shape: [batch size, 3, 256]
-
+        
         # Multi-head attention 
         attention_output, attention_weights = self.attention(
             modality_token,
