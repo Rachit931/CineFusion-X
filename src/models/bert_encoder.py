@@ -7,7 +7,7 @@ class BERTEncoder(nn.Module):
     movie reviews and returns a text embedding.
     """
 
-    def __init__(self,output_dim = 256):
+    def __init__(self,output_dim):
 
         super().__init__()
 

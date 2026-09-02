@@ -8,8 +8,8 @@ class TabularEncoder(nn.Module):
     def __init__(
         self,
         input_dim, 
-        hidden_dim = 256,
-        output_dim = 256,
+        hidden_dim,
+        output_dim 
     ):
 
         super().__init__()

@@ -8,9 +8,9 @@ class MultiModalAttention(nn.Module):
     """
     def __init__(
         self,
-        embedding_dim=256,
-        num_heads=8,
-        dropout=0.1,
+        embedding_dim,
+        num_heads,
+        dropout,
     ):
 
         super().__init__()
