@@ -1,47 +1,32 @@
-import os 
-import time 
-import src.utils as utils
+import os
 
-from pathlib import Path 
-
-import pandas as pd 
+import pandas as pd
 import requests
-from dotenv import load_dotenv
-from tqdm import tqdm 
+from tqdm import tqdm
 
-from config.paths import ( 
-    IMDB_DIR,
-    TMDB_DIR,
-    POSTERS_DIR,
+import src.utils as utils
+from config.paths import (
     CHECKPOINT_DIR,
+    IMDB_DIR,
+    POSTERS_DIR,
+    TMDB_DIR,
 )
 
 session = requests.Session()
-# Load Environment Variables 
+# Load Environment Variables
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
-if not TMDB_API_KEY: 
-    raise ValueError(
-        "TMDB_API_KEY not found in .env"
-    )
+if not TMDB_API_KEY:
+    raise ValueError("TMDB_API_KEY not found in .env")
 
-# Files 
+# Files
 
-IMDB_DATASET = (
-    IMDB_DIR / 
-    "imdb_movies_clean.csv"
-)
+IMDB_DATASET = IMDB_DIR / "imdb_movies_clean.csv"
 
-TMDB_METADATA = (
-    TMDB_DIR / 
-    "tmdb_metadata.csv"
-)
+TMDB_METADATA = TMDB_DIR / "tmdb_metadata.csv"
 
-CHECKPOINT_FILE = (
-    CHECKPOINT_DIR / 
-    "tmdb_metadata_checkpoint.csv"
-)
+CHECKPOINT_FILE = CHECKPOINT_DIR / "tmdb_metadata_checkpoint.csv"
 
 POSTERS_DIR.mkdir(
     parents=True,
@@ -55,14 +40,13 @@ TMDB_DIR.mkdir(
 
 # TMDB Functions
 
+
 def get_tmdb_id(
-        imdb_id,
-        api_key,
-): 
-    
-    url = (
-        f"https://api.themoviedb.org/3/find/{imdb_id}"
-    )
+    imdb_id,
+    api_key,
+):
+
+    url = f"https://api.themoviedb.org/3/find/{imdb_id}"
 
     params = {
         "api_key": api_key,
@@ -75,29 +59,25 @@ def get_tmdb_id(
         timeout=30,
     )
 
-    if response.status_code != 200: 
-        return None 
+    if response.status_code != 200:
+        return None
 
     data = response.json()
 
-    if len(data["movie_results"]) == 0: 
+    if len(data["movie_results"]) == 0:
         return None
 
     return data["movie_results"][0]["id"]
 
 
 def get_movie_details(
-        tmdb_id, 
-        api_key,
-): 
+    tmdb_id,
+    api_key,
+):
 
-    url = (
-        f"https://api.themoviedb.org/3/movie/{tmdb_id}"
-    )
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}"
 
-    params = {
-        "api_key": api_key
-    }
+    params = {"api_key": api_key}
 
     reponse = session.get(
         url,
@@ -105,35 +85,30 @@ def get_movie_details(
         timeout=30,
     )
 
-    if reponse.status_code != 200: 
-        return None 
+    if reponse.status_code != 200:
+        return None
 
     return reponse.json()
 
+
 def download_poster(
-        imdb_id,
-        poster_path,
-): 
+    imdb_id,
+    poster_path,
+):
 
-    if not poster_path: 
-        return None 
+    if not poster_path:
+        return None
 
-    poster_url = ( 
-        "https://image.tmdb.org/t/p/original"
-        + poster_path
-    )
+    poster_url = "https://image.tmdb.org/t/p/original" + poster_path
 
-    poster_file = (f"{imdb_id}.jpg")
+    poster_file = f"{imdb_id}.jpg"
 
-    save_path = (
-        POSTERS_DIR / 
-        poster_file
-    )
+    save_path = POSTERS_DIR / poster_file
 
-    # Skip download if already exists 
+    # Skip download if already exists
 
-    if save_path.exists(): 
-        return poster_file 
+    if save_path.exists():
+        return poster_file
 
     response = session.get(
         poster_url,
@@ -141,79 +116,53 @@ def download_poster(
     )
 
     if response.status_code != 200:
-        return None 
+        return None
 
     with open(
         save_path,
         "wb",
-    ) as file: 
+    ) as file:
+        file.write(response.content)
 
-        file.write(
-            response.content
-        )
+    return poster_file
 
-    return poster_file 
 
-# Collect TMDB Metadata 
+# Collect TMDB Metadata
 
-def collect_tmdb_metadata( 
-        imdb_df,
-        api_key,
-): 
+
+def collect_tmdb_metadata(
+    imdb_df,
+    api_key,
+):
 
     all_movies = []
 
-    # Resume from checkpoint 
+    # Resume from checkpoint
 
-    checkpoint, completed, all_movies = utils.load_checkpoint(
-        CHECKPOINT_FILE
-    )
+    checkpoint, completed, all_movies = utils.load_checkpoint(CHECKPOINT_FILE)
 
     if checkpoint is not None:
+        imdb_df = imdb_df[~imdb_df["imdb_id"].isin(completed)].reset_index(drop=True)
 
-        imdb_df = imdb_df[
-            ~imdb_df["imdb_id"].isin(
-                completed
-            )
-        ].reset_index(drop=True)
+        print(f"Resuming from checkpoint ({len(completed):,} movies already processed)")
 
-        print(
-            f"Resuming from checkpoint "
-            f"({len(completed):,} movies already processed)"
-        )
+    # Main Loop
 
-    # Main Loop 
-
-    for i, imdb_id in enumerate(
-        tqdm(
-            imdb_df["imdb_id"],
-            desc = "Collecting TMDB Metadata"
-        )
-    ): 
-
-        tmdb_id = get_tmdb_id(
-            imdb_id,
-            api_key
-        )
+    for _, imdb_id in enumerate(tqdm(imdb_df["imdb_id"], desc="Collecting TMDB Metadata")):
+        tmdb_id = get_tmdb_id(imdb_id, api_key)
 
         if tmdb_id is None:
-            continue 
+            continue
 
-        details = get_movie_details(
-            tmdb_id,
-            api_key
-        )
+        details = get_movie_details(tmdb_id, api_key)
 
         if details is None:
-            continue 
+            continue
 
-
-        # Clean complex fields 
+        # Clean complex fields
 
         genres = "|".join(
-
             genre["name"]
-
             for genre in details.get(
                 "genres",
                 [],
@@ -221,9 +170,7 @@ def collect_tmdb_metadata(
         )
 
         production_companies = "|".join(
-
             company["name"]
-
             for company in details.get(
                 "production_companies",
                 [],
@@ -231,9 +178,7 @@ def collect_tmdb_metadata(
         )
 
         production_countries = "|".join(
-
             country["name"]
-
             for country in details.get(
                 "production_countries",
                 [],
@@ -241,79 +186,47 @@ def collect_tmdb_metadata(
         )
 
         spoken_languages = "|".join(
-
             language["english_name"]
-
             for language in details.get(
                 "spoken_languages",
                 [],
             )
         )
 
-        # Downloads Poster 
+        # Downloads Poster
 
-        poster_file = download_poster(
+        poster_file = download_poster(imdb_id, details.get("poster_path"))
 
-            imdb_id,
-            details.get(
-                "poster_path"
-            )
-        )
-
-        # Store Metadata 
+        # Store Metadata
 
         movies_data = {
             "imdb_id": imdb_id,
-
             "tmdb_id": details["id"],
-
             "title": details.get("title"),
-
             "original_title": details.get("original_title"),
-
             "overview": details.get("overview"),
-
             "tagline": details.get("tagline"),
-
             "poster_path": details.get("poster_path"),
-
             "poster_file": poster_file,
-
             "budget": details.get("budget"),
-
             "revenue": details.get("revenue"),
-
             "runtime": details.get("runtime"),
-
             "popularity": details.get("popularity"),
-
-            "release_date": details.get('release_date'),
-
+            "release_date": details.get("release_date"),
             "original_language": details.get("original_language"),
-
-            "vote_average": details.get("vote_average"), 
-
+            "vote_average": details.get("vote_average"),
             "vote_count": details.get("vote_count"),
-
             "genres": genres,
-
             "production_companies": production_companies,
-
             "production_countries": production_countries,
-
             "spoken_languages": spoken_languages,
         }
 
-        all_movies.append(
-            movies_data
-        )
+        all_movies.append(movies_data)
 
-        # Save checkpoint every 500 movies 
+        # Save checkpoint every 500 movies
 
-        if ( 
-            len(all_movies) % 500 == 0
-        ): 
-
+        if len(all_movies) % 500 == 0:
             checkpoint = pd.DataFrame(all_movies)
 
             utils.save_checkpoint(
@@ -321,28 +234,24 @@ def collect_tmdb_metadata(
                 CHECKPOINT_FILE,
             )
 
-            print(
-                f"Checkpoint saved",
-                f"({len(all_movies):,} movies)"
-            )
+            print("Checkpoint saved", f"({len(all_movies):,} movies)")
 
+    # Final Metadata
 
-    # Final Metadata 
-
-    tmdb_metadata = pd.DataFrame(
-        all_movies
-    )
+    tmdb_metadata = pd.DataFrame(all_movies)
 
     utils.save_dataframe(
         tmdb_metadata,
         TMDB_METADATA,
     )
 
-    return tmdb_metadata 
+    return tmdb_metadata
 
-# MAIN 
 
-def main(): 
+# MAIN
+
+
+def main():
 
     utils.print_section("TMDB_METADATA_COLLECTION")
 
@@ -352,14 +261,10 @@ def main():
         TMDB_API_KEY,
     )
 
-    print(
-        f"\nCollected",
-        f"{len(tmdb_metadata):,} movies."
-    
-    )
+    print("\nCollected", f"{len(tmdb_metadata):,} movies.")
 
     print(f"\nSaved to:\n{TMDB_METADATA}")
 
-if __name__ == "__main__": 
 
+if __name__ == "__main__":
     main()

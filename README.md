@@ -343,7 +343,7 @@ L_phase1 = L_task
 
 ---
 
-### `model_losses.py`  ---- CURRENTLY HERE. 
+### `model_losses.py`  ---- CURRENTLY HERE.
 
 Handles the supervised multitask objective.
 

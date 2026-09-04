@@ -1,25 +1,20 @@
-import os 
-import time 
-import src.utils as utils
+import os
+import time
 
-import pandas as pd 
-import requests 
+import pandas as pd
+import requests
 from dotenv import load_dotenv
-from tqdm import tqdm 
+from tqdm import tqdm
 
-from config.paths import (
-    TMDB_DIR,
-    CHECKPOINT_DIR
-)
+import src.utils as utils
+from config.paths import CHECKPOINT_DIR, TMDB_DIR
 
 load_dotenv()
 
 TMDB_API_KEY = os.getenv("TMDB_API_KEY")
 
 if not TMDB_API_KEY:
-    raise ValueError(
-        "TMDB_API_KEY not found in .env file"
-    )
+    raise ValueError("TMDB_API_KEY not found in .env file")
 
 TMDB_METADATA = TMDB_DIR / "tmdb_metadata.csv"
 
@@ -29,158 +24,113 @@ CHECKPOINT_FILE = CHECKPOINT_DIR / "tmdb_certi_checkpoint.csv"
 
 session = requests.Session()
 
+
 def get_certifications(
-        tmdb_id,
-        api_key,
+    tmdb_id,
+    api_key,
 ):
 
-    url = (
-    f"https://api.themoviedb.org/3/movie/"
-    f"{tmdb_id}/release_dates"
-    )    
+    url = f"https://api.themoviedb.org/3/movie/{tmdb_id}/release_dates"
 
-    params = {
-        "api_key" : api_key
-    }
+    params = {"api_key": api_key}
 
-    for attempt in range(5): 
-
-        try : 
-
+    for attempt in range(5):
+        try:
             response = session.get(
                 url,
                 params=params,
                 timeout=15,
             )
 
-            if response.status_code == 200: 
-
+            if response.status_code == 200:
                 data = response.json()
 
-                for country in data.get(
-                    "results", []
-                ):
-
-                    if country.get(
-                        "iso_3166_1"
-                    ) != "US": 
+                for country in data.get("results", []):
+                    if country.get("iso_3166_1") != "US":
                         continue
 
-                    for release in country.get(
-                        "release_dates",
-                        []
-                    ):
-
+                    for release in country.get("release_dates", []):
                         certification = release.get("certification")
 
                         if certification:
                             return certification.strip()
 
-                    return None 
+                    return None
 
-                return None 
+                return None
 
             if response.status_code in {
-                429, 500, 502, 503, 504, 
-            }: 
+                429,
+                500,
+                502,
+                503,
+                504,
+            }:
+                time.sleep(2**attempt)
 
-                time.sleep(
-                    2 ** attempt
-                )
+                continue
 
-                continue 
+            print(f"TMDB {tmdb_id}: HTTP {response.status_code}")
 
-            print ( 
-                f"TMDB {tmdb_id}: "
-                f"HTTP {response.status_code}"
-            )
+            return None
 
-            return None 
+        except requests.exceptions.RequestException as error:
+            if attempt == 4:
+                print(f"TMDB {tmdb_id}: {error}")
 
-        except requests.exceptions.RequestException as error: 
+            time.sleep(2**attempt)
 
-            if attempt == 4: 
+    return
 
-                print(
-                    f"TMDB {tmdb_id}: "
-                    f"{error}"
-                )
-
-            time.sleep(
-                2 ** attempt
-            )
-
-    return 
 
 def collect_certification(
-        tmdb_df,
-        api_key,
-): 
+    tmdb_df,
+    api_key,
+):
 
     if CHECKPOINT_FILE.exists():
-
         checkpoint = pd.read_csv(CHECKPOINT_FILE)
 
-    else: 
-
+    else:
         checkpoint = pd.DataFrame(
-            columns = [
-                "tmdb_id", 
+            columns=[
+                "tmdb_id",
                 "content_rating",
             ]
         )
 
-    completed = set(
-        checkpoint[
-            "tmdb_id"
-        ].dropna().astype(int)
+    completed = set(checkpoint["tmdb_id"].dropna().astype(int))
+
+    remaining_df = tmdb_df[~tmdb_df["tmdb_id"].astype("Int64").isin(completed)].reset_index(
+        drop=True
     )
 
-    remaining_df = tmdb_df[
-        ~tmdb_df["tmdb_id"]
-        .astype("Int64")
-        .isin(completed)
-    ].reset_index(drop=True)
-
-    print(
-        f"Resuming from checkpoint: "
-        f"Movies remaining: {len(remaining_df):,}"
-    )
+    print(f"Resuming from checkpoint: Movies remaining: {len(remaining_df):,}")
 
     records = checkpoint.to_dict("records")
 
-
-    for tmdb_id in tqdm(
-        remaining_df["tmdb_id"],
-        desc="Collecting Certifications"
-    ): 
-
+    for tmdb_id in tqdm(remaining_df["tmdb_id"], desc="Collecting Certifications"):
         if pd.isna(tmdb_id):
             continue
 
-        certification = get_certifications(
-            int(tmdb_id),
-            api_key
-        )
+        certification = get_certifications(int(tmdb_id), api_key)
 
-        records.append({
-            "tmdb_id": int(tmdb_id),
-            "content_rating": certification,
-        })
+        records.append(
+            {
+                "tmdb_id": int(tmdb_id),
+                "content_rating": certification,
+            }
+        )
 
         # Checkpoint
 
-        if len(records) % 500 == 0: 
-
+        if len(records) % 500 == 0:
             utils.save_checkpoint(
                 records,
                 CHECKPOINT_FILE,
             )
 
-            print(
-                f"Checkpoint saved: "
-                f"{len(records):,} movies"
-            )
+            print(f"Checkpoint saved: {len(records):,} movies")
 
     utils.save_checkpoint(
         records,
@@ -196,14 +146,14 @@ def collect_certification(
                 "content_rating",
             ]
         ],
-        on = "tmdb_id",
-        how = "left",
+        on="tmdb_id",
+        how="left",
     )
 
     return enriched_df
 
 
-def main(): 
+def main():
 
     utils.print_section("TMDB CERTIFICATIONS")
 
@@ -211,33 +161,19 @@ def main():
 
     print(f"Loaded {len(tmdb_metadata):,} movies")
 
-    if "tmdb_id" not in tmdb_metadata.columns: 
-
-        raise ValueError(
-            "tmdb_id column not found in tmdb_metadata.csv"
-        )
+    if "tmdb_id" not in tmdb_metadata.columns:
+        raise ValueError("tmdb_id column not found in tmdb_metadata.csv")
 
     tmdb_metadata = collect_certification(
         tmdb_metadata,
         TMDB_API_KEY,
     )
 
-    utils.save_dataframe(
-        tmdb_metadata,
-        TMDB_METADATA_ENRICHED
-    )
+    utils.save_dataframe(tmdb_metadata, TMDB_METADATA_ENRICHED)
 
-    total_movies = len(
-        tmdb_metadata
-    )
+    total_movies = len(tmdb_metadata)
 
-    certified_movies = (
-        tmdb_metadata[
-            "content_rating"
-        ]
-        .notna()
-        .sum()
-    )   
+    certified_movies = tmdb_metadata["content_rating"].notna().sum()
 
     print(f"\nTotal movies : {total_movies}:,")
 
@@ -245,19 +181,12 @@ def main():
 
     print(f"Coverage: {certified_movies / total_movies * 100: .2f}%")
 
-
     print("\nCertification Distribution:")
 
-    print(tmdb_metadata[
-        "content_rating"
-        ].value_counts(
-            dropna=False
-        )
-    )
+    print(tmdb_metadata["content_rating"].value_counts(dropna=False))
 
     print(f"\nSaved to: {TMDB_METADATA_ENRICHED}")
 
 
 if __name__ == "__main__":
-
     main()

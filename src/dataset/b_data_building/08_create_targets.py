@@ -1,44 +1,23 @@
 import pandas as pd
-from pathlib import Path
 
 import src.utils as utils
-
 from config.paths import (
     MASTER_MULTIMODEL_DIR,
-    TASK_HEADS_DIR,
     TARGETS_DIR,
+    TASK_HEADS_DIR,
 )
 
+MASTER_DATASET = MASTER_MULTIMODEL_DIR / "multimodel_dataset_prepared.csv"
 
-MASTER_DATASET = (
-    MASTER_MULTIMODEL_DIR
-    / "multimodel_dataset_prepared.csv"
-)
+BOX_OFFICE_DATASET = TASK_HEADS_DIR / "box_office_dataset.csv"
 
-BOX_OFFICE_DATASET = (
-    TASK_HEADS_DIR
-    / "box_office_dataset.csv"
-)
+CONTENT_RATINGS_DATASET = TASK_HEADS_DIR / "content_ratings_dataset.csv"
 
-CONTENT_RATINGS_DATASET = (
-    TASK_HEADS_DIR
-    / "content_ratings_dataset.csv"
-)
+MASTER_TARGET = TARGETS_DIR / "multimodel_dataset_targets.csv"
 
-MASTER_TARGET = (
-    TARGETS_DIR
-    / "multimodel_dataset_targets.csv"
-)
+BOX_OFFICE_TARGET = TARGETS_DIR / "box_office_targets.csv"
 
-BOX_OFFICE_TARGET = (
-    TARGETS_DIR
-    / "box_office_targets.csv"
-)
-
-CONTENT_RATINGS_TARGET = (
-    TARGETS_DIR
-    / "content_ratings_targets.csv"
-)
+CONTENT_RATINGS_TARGET = TARGETS_DIR / "content_ratings_targets.csv"
 
 
 # TARGET CLASS DEFINITIONS
@@ -84,8 +63,8 @@ CONTENT_RATING_CLASSES = {
 
 # BOX-OFFICE TARGET
 
-def create_box_office_target(df):
 
+def create_box_office_target(df):
     """
     Create a four-class box-office target using ROI:
 
@@ -99,10 +78,7 @@ def create_box_office_target(df):
 
     # using ROI to construct the target
 
-    df["roi"] = (
-        (df["revenue"] - df["budget"])
-        / df["budget"]
-    ) * 100
+    df["roi"] = ((df["revenue"] - df["budget"]) / df["budget"]) * 100
 
     df["box_office_target"] = pd.cut(
         df["roi"],
@@ -124,19 +100,15 @@ def create_box_office_target(df):
 
     # Convert class names into class IDs
 
-    df["box_office_target"] = (
-        df["box_office_target"]
-        .map(BOX_OFFICE_CLASSES)
-        .astype("Int64")
-    )
+    df["box_office_target"] = df["box_office_target"].map(BOX_OFFICE_CLASSES).astype("Int64")
 
     return df
 
 
 # CONTENT-RATING TARGET
 
-def create_content_ratings_target(df):
 
+def create_content_ratings_target(df):
     """
     Keep only the four content-rating classes selected during EDA:
 
@@ -158,9 +130,7 @@ def create_content_ratings_target(df):
         "R",
     ]
 
-    df = df[
-        df["content_rating"].isin(valid_rating)
-    ].copy()
+    df = df[df["content_rating"].isin(valid_rating)].copy()
 
     # Convert class names into class IDs
 
@@ -177,8 +147,8 @@ def create_content_ratings_target(df):
 
 # RATINGS DATASET
 
-def create_ratings_target(df):
 
+def create_ratings_target(df):
     """
     Ratings is a continuous regression target.
     """
@@ -195,8 +165,8 @@ def create_ratings_target(df):
 
 # GENRE TARGET
 
-def create_genre_target(df):
 
+def create_genre_target(df):
     """
     Genre is a multi-label target.
 
@@ -225,34 +195,17 @@ def create_genre_target(df):
         df["genres"]
         .fillna("")
         .astype(str)
-        .apply(
-            lambda value: {
-                genre.strip()
-                for genre in value.split("|")
-                if genre.strip()
-            }
-        )
+        .apply(lambda value: {genre.strip() for genre in value.split("|") if genre.strip()})
     )
 
     # Create one binary target column per genre
 
     for genre in GENRE_CLASSES:
+        column_name = "genre_" + genre.lower().replace(" ", "_") + "_target"
 
-        column_name = (
-            "genre_"
-            + genre.lower().replace(" ", "_")
-            + "_target"
-        )
-
-        df[column_name] = (
-            movie_genres
-            .apply(
-                lambda genres: int(
-                    genre in genres
-                )
-            )
-            .astype("int8")
-        )
+        df[column_name] = movie_genres.apply(
+            lambda genres, genre=genre: int(genre in genres)
+        ).astype("int8")
 
     return df
 
@@ -270,15 +223,11 @@ def main():
 
     master = master.copy()
 
-    print(
-        f"Prepared master rows: {len(master):,}"
-    )
+    print(f"Prepared master rows: {len(master):,}")
 
     # Rating target
 
-    master = create_ratings_target(
-        master
-    )
+    master = create_ratings_target(master)
 
     print(
         "Missing rating targets: ",
@@ -287,15 +236,12 @@ def main():
 
     # Genre target
 
-    master = create_genre_target(
-        master
-    )
+    master = create_genre_target(master)
 
     genre_target_columns = [
         column
         for column in master.columns
-        if column.startswith("genre_")
-        and column.endswith("_target")
+        if column.startswith("genre_") and column.endswith("_target")
     ]
 
     print(
@@ -303,9 +249,7 @@ def main():
         len(genre_target_columns),
     )
 
-    print(
-        genre_target_columns
-    )
+    print(genre_target_columns)
 
     # Content-Rating target
 
@@ -314,43 +258,19 @@ def main():
         low_memory=False,
     )
 
-    content_rating = (
-        create_content_ratings_target(
-            content_rating
-        )
-    )
+    content_rating = create_content_ratings_target(content_rating)
 
-    print(
-        f"\nContent-rating rows: "
-        f"{len(content_rating):,}"
-    )
+    print(f"\nContent-rating rows: {len(content_rating):,}")
 
-    print(
-        "\nContent-rating target distribution: "
-    )
+    print("\nContent-rating target distribution: ")
 
-    print(
-        content_rating[
-            "content_rating_target"
-        ]
-        .value_counts()
-        .sort_index()
-    )
+    print(content_rating["content_rating_target"].value_counts().sort_index())
 
-    print(
-        "\nContent-rating target percentages: "
-    )
+    print("\nContent-rating target percentages: ")
 
     print(
         (
-            content_rating[
-                "content_rating_target"
-            ]
-            .value_counts(
-                normalize=True
-            )
-            .sort_index()
-            * 100
+            content_rating["content_rating_target"].value_counts(normalize=True).sort_index() * 100
         ).round(2)
     )
 
@@ -374,42 +294,18 @@ def main():
         low_memory=False,
     )
 
-    box_office = create_box_office_target(
-        box_office
-    )
+    box_office = create_box_office_target(box_office)
+
+    print(f"\nBox-office rows: {len(box_office):,}")
+
+    print("\nBox-office target distribution: ")
+
+    print(box_office["box_office_target"].value_counts().sort_index())
+
+    print("\nBox-office target percentages: ")
 
     print(
-        f"\nBox-office rows: "
-        f"{len(box_office):,}"
-    )
-
-    print(
-        "\nBox-office target distribution: "
-    )
-
-    print(
-        box_office[
-            "box_office_target"
-        ]
-        .value_counts()
-        .sort_index()
-    )
-
-    print(
-        "\nBox-office target percentages: "
-    )
-
-    print(
-        (
-            box_office[
-                "box_office_target"
-            ]
-            .value_counts(
-                normalize=True
-            )
-            .sort_index()
-            * 100
-        ).round(2)
+        (box_office["box_office_target"].value_counts(normalize=True).sort_index() * 100).round(2)
     )
 
     # Add box office target
@@ -444,9 +340,7 @@ def main():
 
     # Summary
 
-    utils.print_section(
-        "TARGET CREATION COMPLETE"
-    )
+    utils.print_section("TARGET CREATION COMPLETE")
 
     print("\nSaved files:")
 

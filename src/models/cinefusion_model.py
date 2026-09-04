@@ -1,12 +1,13 @@
 import torch.nn as nn
 
-from src.models.vit_encoder import ViTEncoder
 from src.models.bert_encoder import BERTEncoder
 from src.models.mlp_encoder import TabularEncoder
 from src.models.self_attention import MultiModalAttention
 from src.models.task_heads import Taskheads
+from src.models.vit_encoder import ViTEncoder
 
-class CineFusionModel(nn.Module): 
+
+class CineFusionModel(nn.Module):
     """
     Complete Model in Phase 1:
     """
@@ -25,44 +26,30 @@ class CineFusionModel(nn.Module):
             output_dim=embedding_dim,
         )
 
-        # Text Encoder 
-        self.bert_encoder = BERTEncoder(
-            output_dim=embedding_dim
-        )
+        # Text Encoder
+        self.bert_encoder = BERTEncoder(output_dim=embedding_dim)
 
-        # Tabular Encoder 
+        # Tabular Encoder
         self.tabular_encoder = TabularEncoder(
-            input_dim=tabular_input_dim,
-            hidden_dim=tabular_hidden_dim,
-            output_dim=embedding_dim
+            input_dim=tabular_input_dim, hidden_dim=tabular_hidden_dim, output_dim=embedding_dim
         )
 
         # Multimodel attention
         self.multimodel_attention = MultiModalAttention(
-            embedding_dim=embedding_dim,
-            num_heads=8,
-            dropout=0.1
+            embedding_dim=embedding_dim, num_heads=8, dropout=0.1
         )
 
         # Task Heads
-        self.task_heads = Taskheads(
-            input_dim=embedding_dim
-        )
+        self.task_heads = Taskheads(input_dim=embedding_dim)
 
-    def forward(
-        self,
-        pixel_values,
-        input_ids,
-        attention_mask,
-        features
-    ):
+    def forward(self, pixel_values, input_ids, attention_mask, features):
         """
-        Inputs: 
+        Inputs:
             pixel_values:
                 Preprocessed poster images:
                 [B,3,H,W]
-                
-            input_ids: 
+
+            input_ids:
                 Tokenized movie overviews:
                 [B, sequence_length]
 
@@ -80,41 +67,30 @@ class CineFusionModel(nn.Module):
                 * text_embedding
                 * tabular_embedding
                 * fused_representation
-                * predictions  
+                * predictions
         """
 
-        # Visual Branch 
-        visual_embedding = self.vit_encoder(
-            pixel_values
-        )
+        # Visual Branch
+        visual_embedding = self.vit_encoder(pixel_values)
 
-        # Text Branch 
-        text_embedding = self.bert_encoder(
-            input_ids,
-            attention_mask
-        )
+        # Text Branch
+        text_embedding = self.bert_encoder(input_ids, attention_mask)
 
-        # Tabular branch 
-        tabular_embedding = self.tabular_encoder(
-            features
-        )
+        # Tabular branch
+        tabular_embedding = self.tabular_encoder(features)
 
         # Multimodal fusion
         fused_representation = self.multimodel_attention(
-            visual_embedding,
-            text_embedding,
-            tabular_embedding
+            visual_embedding, text_embedding, tabular_embedding
         )
 
-        predictions = self.task_heads(
-            fused_representation
-        )
+        predictions = self.task_heads(fused_representation)
 
         # Return representations and predictions
-        return { 
+        return {
             "visual_embedding": visual_embedding,
             "text_embedding": text_embedding,
             "tabular_embedding": tabular_embedding,
             "fused_representation": fused_representation,
-            "predictions": predictions
+            "predictions": predictions,
         }
