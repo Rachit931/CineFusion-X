@@ -11,7 +11,7 @@ load_dotenv()
 
 DATA_ROOT = Path(os.getenv("CINEFUSION_DATA_ROOT", "./data")).expanduser().resolve()
 
-PROJECT_ROOT = Path(__file__).expanduser().resolve()
+PROJECT_ROOT = Path(__file__).resolve().parent[1]
 
 # RAW DATA
 
