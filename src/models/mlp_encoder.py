@@ -20,7 +20,7 @@ class TabularEncoder(nn.Module):
             nn.ReLU(),
             # Layer 3
             nn.Linear(input_dim, hidden_dim),
-            nn.ReLU,
+            nn.ReLU(),
             # Layer 4
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),

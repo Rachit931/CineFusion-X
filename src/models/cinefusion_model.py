@@ -3,7 +3,7 @@ import torch.nn as nn
 from src.models.bert_encoder import BERTEncoder
 from src.models.mlp_encoder import TabularEncoder
 from src.models.self_attention import MultiModalAttention
-from src.models.task_heads import Taskheads
+from src.models.task_heads import TaskHeads
 from src.models.vit_encoder import ViTEncoder
 
 
@@ -40,7 +40,7 @@ class CineFusionModel(nn.Module):
         )
 
         # Task Heads
-        self.task_heads = Taskheads(input_dim=embedding_dim)
+        self.task_heads = TaskHeads(input_dim=embedding_dim)
 
     def forward(self, pixel_values, input_ids, attention_mask, features):
         """

@@ -1,3 +1,5 @@
+from typing import cast
+
 import timm
 import torch.nn as nn
 
@@ -14,7 +16,7 @@ class ViTEncoder(nn.Module):
         self.vit = timm.create_model("vit_base_patch16_224.mae", pretrained=True, num_classes=0)
 
         # Model's patches dimensionality reduction
-        vit_dim = self.vit.num_features
+        vit_dim = cast(int, self.vit.num_features)
 
         self.projection = nn.Linear(vit_dim, output_dim)
 
