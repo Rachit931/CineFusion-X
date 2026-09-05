@@ -1,6 +1,5 @@
 # CineFusion - pre-commit configuration
-# Run fast, automatic checks before a Git commit is created.
-# These checks run locally on the machine.
+# Runs automatic checks before every local commit.
 
 default_stages:
   - pre-commit
@@ -9,56 +8,30 @@ fail_fast: false
 
 repos:
 
-  # BASIC FILE / GIT CHECKS
+  # Basic file checks
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
-
     hooks:
-
-      # Prevent accidental merge-conflict markers.
       - id: check-merge-conflict
-
-      # Make sure every text file ends with a newline.
       - id: end-of-file-fixer
-
-      # Remove trailing whitespace.
       - id: trailing-whitespace
 
-  # RUFF
-  #
-  # Ruff handles:
-  #   - linting
-  #   - safe automatic fixes
-  #   - import sorting
-  #
-  # Formatting is handled by ruff-format below.
+
+  # Ruff
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.0
-
     hooks:
-
       - id: ruff-check
-        args:
-          - --fix
-
+        args: [--fix]
       - id: ruff-format
 
-  # DETECT-SECRETS
 
-  # Checks files being committed for likely secrets such as:
-  # API keys, passwords, tokens, etc.
-
-  # .secrets.baseline contains findings that were already
-  # known when the baseline was created.
+  # Detect secrets
 
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
-
     hooks:
-
       - id: detect-secrets
-        args:
-          - --baseline
-          - .secrets.baseline
+        args: [--baseline, .secrets.baseline]

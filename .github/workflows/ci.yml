@@ -1,110 +1,77 @@
-
-# CineFusion - Continuous Integration
-# Verify that code pushed to GitHub:
-#   1. passes the same quality checks used locally
-#   2. passes type checking
-#   3. passes the test suite
-# Docker/CD intentionally do NOT belong here yet.
-
 name: CineFusion CI
 
-
-# WHEN SHOULD CI RUN?
-
 on:
-
-  # Run when code is pushed directly to main.
   push:
     branches:
       - main
 
-  # Run when a Pull Request targets main.
   pull_request:
     branches:
       - main
 
-# CANCEL OLD RUNS
-# Example:
-# We push commit A.
-# CI starts.
-# Then We immediately push commit B.
-# The CI run for A is no longer useful, so cancel it.
-
-concurrency:
-  group: cinefusion-ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-
-# GITHUB TOKEN PERMISSIONS
-
 permissions:
   contents: read
 
-
-# JOBS
-
 jobs:
 
-  quality-and-tests:
-    # GitHub creates a temporary Ubuntu machine.
+  code-quality:
     runs-on: ubuntu-latest
 
-
     steps:
-
-      # 1. GET CINEFUSION'S SOURCE CODE
-
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # 2. INSTALL UV
 
       - name: Install uv
         uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
         with:
           enable-cache: true
 
-      # 3. CREATE CINEFUSION'S ENVIRONMENT
-      #
-      # --locked means:
-      # use uv.lock exactly.
-      #
-      # --dev means:
-      # install development tools such as:
-      # Ruff, Pylint, mypy, pre-commit, etc.
+      - name: Install project
+        run: uv sync --locked --dev
+
+      - name: Run Ruff
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run detect-secrets
+        run: uv run detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
+
+
+  type-checking:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          enable-cache: true
 
       - name: Install project
         run: uv sync --locked --dev
 
-      # 4. RUN THE SAME PRE-COMMIT CHECKS
-      #
-      # This runs:
-      #   - basic file checks
-      #   - Ruff
-      #   - Ruff formatter
-      #   - detect-secrets
-      #
-      # --all-files means:
-      # check the repository, not merely the files changed
-      # in this particular GitHub event.
-
-      - name: Run pre-commit checks
-        run: uv run pre-commit run --all-files
-
-      # 5. TYPE CHECKING
-
       - name: Run mypy
         run: uv run mypy src
 
-      # 6. TESTS + COVERAGE
-      #
-      # pytest runs once.
-      # Coverage is collected during the same test run.
 
-      - name: Run tests with coverage
-        run: |
-          uv run pytest \
-            --cov=src \
-            --cov-report=term-missing
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9
+        with:
+          enable-cache: true
+
+      - name: Install project
+        run: uv sync --locked --dev
+
+      - name: Run tests
+        run: uv run pytest

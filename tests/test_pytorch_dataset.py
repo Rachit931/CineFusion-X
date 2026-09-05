@@ -25,7 +25,7 @@ MAX_TEXT_LENGTH = 512
 # ============================================================
 
 
-def main():
+def test_pytorch_dataset():
 
     print("\n" + "=" * 80)
     print("CINEFUSION-X DATASET VALIDATION")
@@ -633,40 +633,36 @@ def main():
 
     print(
         """
-CSV
-✓ Final training dataset loads
-✓ 19 genre targets
-✓ Genre targets are multi-hot
-✓ Rating target is valid
-✓ Box-office classes are valid
-✓ Content-rating classes are valid
-✓ No target leakage
-✓ Features are numeric
-✓ Features contain no NaN/Inf
-✓ IMDb IDs are valid
-✓ Posters exist
+        CSV
+        ✓ Final training dataset loads
+        ✓ 19 genre targets
+        ✓ Genre targets are multi-hot
+        ✓ Rating target is valid
+        ✓ Box-office classes are valid
+        ✓ Content-rating classes are valid
+        ✓ No target leakage
+        ✓ Features are numeric
+        ✓ Features contain no NaN/Inf
+        ✓ IMDb IDs are valid
+        ✓ Posters exist
 
-MOVIEDATASET
-✓ __getitem__ works
-✓ Inputs are tensors
-✓ Targets are tensors
-✓ Target dtypes are correct
-✓ Target shapes are correct
-✓ Masks are boolean
-✓ Genre masking is correct
+        MOVIEDATASET
+        ✓ __getitem__ works
+        ✓ Inputs are tensors
+        ✓ Targets are tensors
+        ✓ Target dtypes are correct
+        ✓ Target shapes are correct
+        ✓ Masks are boolean
+        ✓ Genre masking is correct
 
-DATALOADER
-✓ Batch creation works
-✓ Batch shapes are correct
-✓ Batch dtypes are correct
-✓ Batch masks are correct
-✓ Mask=True selects only valid targets
-✓ No NaN/Inf in numerical batch values
+        DATALOADER
+        ✓ Batch creation works
+        ✓ Batch shapes are correct
+        ✓ Batch dtypes are correct
+        ✓ Batch masks are correct
+        ✓ Mask=True selects only valid targets
+        ✓ No NaN/Inf in numerical batch values
 
-READY FOR MODELING.
-"""
+        READY FOR MODELING.
+        """
     )
-
-
-if __name__ == "__main__":
-    main()
