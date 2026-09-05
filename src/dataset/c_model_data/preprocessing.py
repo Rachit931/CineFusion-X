@@ -1,17 +1,14 @@
-import pandas as pd 
-import joblib 
+import joblib
 import numpy as np
-
+import pandas as pd
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import ( 
+from sklearn.preprocessing import (
     MultiLabelBinarizer,
     OneHotEncoder,
     StandardScaler,
 )
 
-from config.paths import PREPROCESSOR_DIR
-
-# FINAL FEATURE CONFIG 
+# FINAL FEATURE CONFIG
 
 NUMERIC_COLUMNS = [
     "runtime",
@@ -22,7 +19,7 @@ NUMERIC_COLUMNS = [
 ]
 
 CATEGORICAL_COLUMNS = [
-        "original_language",
+    "original_language",
 ]
 
 MULTILABEL_COLUMNS = [
@@ -33,84 +30,75 @@ MULTILABEL_COLUMNS = [
 
 TOP_N_COMPANIES = 100
 
-# BASIC CLENAING HELPERS 
+# BASIC CLENAING HELPERS
 
-def clean_string(value): 
+
+def clean_string(value):
     """
-    Return a stripped string or an empty string 
-    for missing values. 
+    Return a stripped string or an empty string
+    for missing values.
     """
     if pd.isna(value):
         return ""
 
     return str(value).strip()
 
+
 def split_multilabel(value):
     """
-    Convert: 
+    Convert:
         'A|B|C'
-    
-    into: 
+
+    into:
         ['A','B','C']
-        
+
     Missing/empty value become [].
     """
     value = clean_string(value)
 
     if not value:
-        return[]
+        return []
 
-    return [
-        item.strip()
-        for item in value.split("|")
-        if item.strip()
-    ]
+    return [item.strip() for item in value.split("|") if item.strip()]
 
-# DETERMINISTIC FEATURE ENGINEERING 
+
+# DETERMINISTIC FEATURE ENGINEERING
+
 
 def create_engineered_features(df):
     """
-    Create the final raw feature representation. 
-    
+    Create the final raw feature representation.
+
     This function does not learn dataset statistics.
     """
 
     data = df.copy()
 
-    # Numeric conversion 
+    # Numeric conversion
 
     data["release_year"] = pd.to_numeric(
         data["release_year"],
         errors="coerce",
     )
 
-    # Budget missingness flag 
+    # Budget missingness flag
 
-    data["budget_missing"] = (
-        data["budget"]
-        .isna()
-        .astype(np.float32)
-    )
+    data["budget_missing"] = data["budget"].isna().astype(np.float32)
 
-    # Release month from release_date 
+    # Release month from release_date
 
     release_date = pd.to_datetime(
         data["release_date"],
         errors="coerce",
     )
 
-    data["release_month"] = (
-        release_date.dt.month
-    )
+    data["release_month"] = release_date.dt.month
 
     # Original Language
     # Only single categorical feature
 
     data["original_language"] = (
-        data["original_language"]
-        .fillna("__UNKNOWN__")
-        .astype(str)
-        .str.strip()
+        data["original_language"].fillna("__UNKNOWN__").astype(str).str.strip()
     )
 
     data.loc[
@@ -118,39 +106,27 @@ def create_engineered_features(df):
         "original_language",
     ] = "__UNKNOWN__"
 
-
-    # Multi-label cleaning 
+    # Multi-label cleaning
 
     for col in MULTILABEL_COLUMNS:
-        data[f"{col}_list"] = (
-            data[col]
-            .apply(split_multilabel)
-        )
+        data[f"{col}_list"] = data[col].apply(split_multilabel)
 
-    # Count features 
+    # Count features
 
-    data["num_production_companies"] = (
-        data["production_companies_list"]
-        .apply(len)
-    )
+    data["num_production_companies"] = data["production_companies_list"].apply(len)
 
-    data["num_spoken_languages"] = (
-        data["spoken_languages_list"]
-        .apply(len)
-    )
+    data["num_spoken_languages"] = data["spoken_languages_list"].apply(len)
 
-    data["num_production_countries"] = (
-        data["production_countries_list"]
-        .apply(len)
-    )
+    data["num_production_countries"] = data["production_countries_list"].apply(len)
 
-    return data 
+    return data
 
-# TABULAR PREPROCESSOR 
 
-class TabularPreprocessor: 
+# TABULAR PREPROCESSOR
 
-    def __init__(self,top_n_companies=TOP_N_COMPANIES):
+
+class TabularPreprocessor:
+    def __init__(self, top_n_companies=TOP_N_COMPANIES):
 
         self.top_n_companies = top_n_companies
 
@@ -160,7 +136,7 @@ class TabularPreprocessor:
         )
 
         self.numeric_imputer = SimpleImputer(
-            strategy = "median",
+            strategy="median",
         )
 
         self.month_imputer = SimpleImputer(
@@ -169,8 +145,8 @@ class TabularPreprocessor:
 
         # Encoders
         self.language_encoder = OneHotEncoder(
-            handle_unknown = "ignore", 
-            sparse_output = False,
+            handle_unknown="ignore",
+            sparse_output=False,
         )
 
         self.country_encoder = MultiLabelBinarizer()
@@ -188,86 +164,62 @@ class TabularPreprocessor:
 
         self.fitted = False
 
-    # FIT 
+    # FIT
 
-    def fit(self, train_df): 
+    def fit(self, train_df):
         """
-        Fit learned preprocessing using TRAINING DATA ONLY 
+        Fit learned preprocessing using TRAINING DATA ONLY
         """
 
         data = create_engineered_features(train_df)
 
-        # Released Month 
+        # Released Month
 
-        self.month_imputer.fit(
-            data[["release_month"]]
-        )
+        self.month_imputer.fit(data[["release_month"]])
 
-        # Budget 
+        # Budget
 
-        budget = (
-            self.budget_imputer
-            .fit_transform(
-                data[["budget"]]
-            )
-        )  
-        # imputation was needed beforehand for 
+        budget = self.budget_imputer.fit_transform(data[["budget"]])
+        # imputation was needed beforehand for
         # standerization and fitting it here.
 
-        budget_log = np.log1p(
-            budget
-        )
+        budget_log = np.log1p(budget)
 
         self.budget_scaler.fit(budget_log)
 
-        # Other numeric features 
+        # Other numeric features
 
-        numeric= (
-            self.numeric_imputer
-            .fit_transform(data[NUMERIC_COLUMNS])
-        )
+        numeric = self.numeric_imputer.fit_transform(data[NUMERIC_COLUMNS])
 
-        self.numeric_scaler.fit(
-            numeric
-        )
+        self.numeric_scaler.fit(numeric)
 
         # Origninal Language
 
-        self.language_encoder.fit(
-            data[CATEGORICAL_COLUMNS]
-        )
+        self.language_encoder.fit(data[CATEGORICAL_COLUMNS])
 
-        # Spoken Languages 
+        # Spoken Languages
 
-        self.spoken_language_encoder.fit(
-            data["spoken_languages_list"].tolist()
-        )
+        self.spoken_language_encoder.fit(data["spoken_languages_list"].tolist())
 
-        # Production countries 
+        # Production countries
 
-        self.country_encoder.fit(
-            data["production_countries_list"].tolist()
-        )
+        self.country_encoder.fit(data["production_countries_list"].tolist())
 
-        # Production companies  
+        # Production companies
 
         all_companies = []
 
         for companies in data["production_companies_list"]:
-            for company in companies: 
+            for company in companies:
                 all_companies.append(company)
 
         self.top_companies = set(
-            pd.Series(all_companies)
-            .value_counts()
-            .head(self.top_n_companies)
-            .index
+            pd.Series(all_companies).value_counts().head(self.top_n_companies).index
         )
 
         company_list = []
 
         for companies in data["production_companies_list"]:
-
             mapped = []
 
             if not companies:
@@ -275,7 +227,6 @@ class TabularPreprocessor:
 
             else:
                 for company in companies:
-
                     if company in self.top_companies:
                         mapped.append(company)
                     else:
@@ -289,7 +240,7 @@ class TabularPreprocessor:
 
         return self
 
-    # TRANSFORM 
+    # TRANSFORM
 
     def transform(self, df):
         """
@@ -297,52 +248,36 @@ class TabularPreprocessor:
         """
 
         if not self.fitted:
-            raise RuntimeError(
-                "Fit the preprocessor before transform()."
-            )
+            raise RuntimeError("Fit the preprocessor before transform().")
 
         data = create_engineered_features(df)
 
-        # This will become our final feature DataFrame. 
+        # This will become our final feature DataFrame.
         features = pd.DataFrame(index=data.index)
 
-        # MONTH 
+        # MONTH
 
-        month = self.month_imputer.transform(
-            data[["release_month"]]
-        ).ravel()
+        month = self.month_imputer.transform(data[["release_month"]]).ravel()
 
-        features["month_sin"] = np.sin(
-            2 * np.pi * month / 12 
-        )
+        features["month_sin"] = np.sin(2 * np.pi * month / 12)
 
-        features["month_cos"] = np.cos(
-            2 * np.pi * month / 12 
-        )
+        features["month_cos"] = np.cos(2 * np.pi * month / 12)
 
         # BUDGET
-        #  
-        budget = self.budget_imputer.transform(
-            data[["budget"]]
-        )
+        #
+        budget = self.budget_imputer.transform(data[["budget"]])
 
         budget = np.log1p(budget)
 
-        budget = self.budget_scaler.transform(
-            budget
-        )
+        budget = self.budget_scaler.transform(budget)
 
         features["log_budget"] = budget.ravel()
 
-        # NUMERIC FEATURES 
+        # NUMERIC FEATURES
 
-        numeric = self.numeric_imputer.transform(
-            data[NUMERIC_COLUMNS]
-        )
+        numeric = self.numeric_imputer.transform(data[NUMERIC_COLUMNS])
 
-        numeric = self.numeric_scaler.transform(
-            numeric
-        )
+        numeric = self.numeric_scaler.transform(numeric)
 
         numeric_df = pd.DataFrame(
             numeric,
@@ -352,28 +287,18 @@ class TabularPreprocessor:
 
         features = pd.concat(
             [features, numeric_df],
-            axis=1, 
+            axis=1,
         )
 
-        # BUDGET MISSING FLAG 
+        # BUDGET MISSING FLAG
 
-        features["budget_missing"] = (
-            data["budget_missing"]
-            .to_numpy(dtype = np.float32)
-        )
+        features["budget_missing"] = data["budget_missing"].to_numpy(dtype=np.float32)
 
         # ORIGINAL LANGUAGE
 
-        language = self.language_encoder.transform(
-            data[CATEGORICAL_COLUMNS]
-        )
+        language = self.language_encoder.transform(data[CATEGORICAL_COLUMNS])
 
-        language_names = (
-            self.language_encoder
-            .get_feature_names_out(
-                CATEGORICAL_COLUMNS
-            )   
-        )
+        language_names = self.language_encoder.get_feature_names_out(CATEGORICAL_COLUMNS)
 
         language_df = pd.DataFrame(
             language,
@@ -388,9 +313,7 @@ class TabularPreprocessor:
 
         # PRODUCTION COUNTRIES
 
-        known_countries = set(
-            self.country_encoder.classes_
-        )
+        known_countries = set(self.country_encoder.classes_)
 
         country_lists = []
 
@@ -403,19 +326,14 @@ class TabularPreprocessor:
 
             country_lists.append(filtered)
 
-        countries = self.country_encoder.transform(
-            country_lists
-        )
-      
-        country_names = [
-            f"country_{name}"
-            for name in self.country_encoder.classes_
-        ]
+        countries = self.country_encoder.transform(country_lists)
+
+        country_names = [f"country_{name}" for name in self.country_encoder.classes_]
 
         country_df = pd.DataFrame(
             countries,
-            columns = country_names,
-            index = data.index,
+            columns=country_names,
+            index=data.index,
         )
 
         features = pd.concat(
@@ -423,16 +341,13 @@ class TabularPreprocessor:
             axis=1,
         )
 
-        # SPOKEN LANGUAGES 
+        # SPOKEN LANGUAGES
 
-        known_languages = set(
-            self.spoken_language_encoder.classes_
-        )
+        known_languages = set(self.spoken_language_encoder.classes_)
 
         spoken_lists = []
 
         for values in data["spoken_languages_list"]:
-
             filtered = []
 
             for language in values:
@@ -441,29 +356,22 @@ class TabularPreprocessor:
 
             spoken_lists.append(filtered)
 
-        spoken_languages = (
-            self.spoken_language_encoder.transform(
-                spoken_lists
-            )
-        )
+        spoken_languages = self.spoken_language_encoder.transform(spoken_lists)
 
-        spoken_names = [
-            f"spoken_language_{name}"
-            for name in self.spoken_language_encoder.classes_
-        ]
+        spoken_names = [f"spoken_language_{name}" for name in self.spoken_language_encoder.classes_]
 
         spoken_df = pd.DataFrame(
             spoken_languages,
-            columns = spoken_names,
-            index = data.index,
+            columns=spoken_names,
+            index=data.index,
         )
 
         features = pd.concat(
             [features, spoken_df],
-            axis = 1,
+            axis=1,
         )
 
-        # PRODUCTION COMPANIES 
+        # PRODUCTION COMPANIES
 
         company_lists = []
 
@@ -473,55 +381,49 @@ class TabularPreprocessor:
             if not companies:
                 mapped.append("__UNKNOWN__")
 
-            else: 
+            else:
                 for company in companies:
-
                     if company in self.top_companies:
                         mapped.append(company)
 
-                    else: 
+                    else:
                         mapped.append("__OTHER__")
 
             company_lists.append(mapped)
 
-        companies = self.company_encoder.transform(
-            company_lists
-        )
+        companies = self.company_encoder.transform(company_lists)
 
-        company_names = [
-            f"company_{name}"
-            for name in self.company_encoder.classes_
-        ]
+        company_names = [f"company_{name}" for name in self.company_encoder.classes_]
 
         company_df = pd.DataFrame(
             companies,
-            columns = company_names,
+            columns=company_names,
             index=data.index,
         )
 
         features = pd.concat(
             [features, company_df],
-            axis = 1,
+            axis=1,
         )
 
-        # FINAL DATAFRAME 
+        # FINAL DATAFRAME
 
-        features = features.astype(
-            np.float32
-        )
+        features = features.astype(np.float32)
 
         return features
 
+
 # SAVE / LOAD PREPROCESSOR
 
-def save_preprocessor(preprocessor, path): 
+
+def save_preprocessor(preprocessor, path):
 
     joblib.dump(
         preprocessor,
         path,
     )
 
-def load_preprocessor(path): 
+
+def load_preprocessor(path):
 
     return joblib.load(path)
-

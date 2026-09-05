@@ -1,7 +1,7 @@
 [project]
 name = "cinefusion-x"
 version = "0.1.0"
-description = "Add your description here"
+description = "A multimodel movie recommendation and analysis system."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
     "mp-api>=0.46.4",
     "pandas>=3.0.3",
     "pillow>=12.3.0",
-    "pylint>=4.0.7",
+    "pre-commit>=4.6.2",
     "reflex>=0.9.8.post1",
     "requests>=2.34.2",
     "scikit-learn>=1.9.0",
@@ -24,3 +24,68 @@ dependencies = [
     "tqdm>=4.70.0",
     "transformers>=5.16.1",
 ]
+
+# DEVELOPMENT TOOLS
+
+[dependency-groups]
+dev = [
+    "detect-secrets>=1.5.0",
+    "mypy>=2.3.1",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.6",
+]
+
+# RUFF
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+exclude = [
+    ".venv",
+    "__pycache__",
+    ".states",
+    "data",
+    "artifacts",
+    "uploaded_files",
+    "notebooks",
+]
+
+[tool.ruff.lint]
+select = [
+    "E", # pycodestyle errors
+    "F", # Pyflakes
+    "I", # import sorting
+    "B", # flake8-bugbear
+    "UP",# pyupgrade
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# MYPY
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+exclude = [
+    "^data/",
+    "^artifacts/",
+    "^uploaded_files/",
+    "^notebooks/",
+    "^\\.venv/",
+]
+
+# PYTEST
+
+[too.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
