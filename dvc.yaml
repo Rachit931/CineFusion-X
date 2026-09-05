@@ -45,7 +45,7 @@ stages:
       - config/paths.py
       - data/raw/tmdb/tmdb_metadata.csv
       - data/raw/posters
-    outs: 
+    outs:
       - data/processed/checkpoints/tmdb_validation_complete.txt
 
   merge_dataset:

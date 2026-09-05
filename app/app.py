@@ -1,10 +1,8 @@
 import asyncio
 from pathlib import Path
-from typing import List
 
 import reflex as rx
 from pydantic import BaseModel
-
 
 # =============================================================================
 # Cinefusion-X
@@ -56,6 +54,7 @@ RED = "#fb7185"
 # DATA MODELS
 # =============================================================================
 
+
 class ProbabilityItem(BaseModel):
     category: str
     probability: int
@@ -64,16 +63,16 @@ class ProbabilityItem(BaseModel):
 class PredictionResult(BaseModel):
     predicted_rating: float = 0.0
     box_office_class: str = ""
-    box_office_items: List[ProbabilityItem] = []
+    box_office_items: list[ProbabilityItem] = []
     content_rating_class: str = ""
-    content_rating_items: List[ProbabilityItem] = []
-    genres: List[str] = []
+    content_rating_items: list[ProbabilityItem] = []
+    genres: list[str] = []
     confidence_score: float = 0.0
     confidence_progress: int = 0
     greenlight_score: int = 0
     cluster_name: str = ""
-    similar_movies: List[str] = []
-    counterfactuals: List[str] = []
+    similar_movies: list[str] = []
+    counterfactuals: list[str] = []
 
 
 class MovieCandidate(BaseModel):
@@ -94,12 +93,13 @@ class RecommendationResult(BaseModel):
     box_office_class: str
     confidence_score: float
     greenlight_score: int
-    genres: List[str] = []
+    genres: list[str] = []
 
 
 # =============================================================================
 # STATE
 # =============================================================================
+
 
 class InferenceState(rx.State):
     """All frontend state for Cinefusion-X."""
@@ -113,10 +113,7 @@ class InferenceState(rx.State):
     )
     budget: str = "190000000"
     runtime: str = "166"
-    poster_url: str = (
-        "https://image.tmdb.org/t/p/w500/"
-        "1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg"
-    )
+    poster_url: str = "https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg"
 
     is_processing: bool = False
     pipeline_stage: int = 0
@@ -124,15 +121,15 @@ class InferenceState(rx.State):
     show_results: bool = False
     results: PredictionResult = PredictionResult()
 
-    recommendation_queue: List[MovieCandidate] = []
+    recommendation_queue: list[MovieCandidate] = []
     bulk_titles: str = ""
     recommendation_running: bool = False
     recommendation_stage: int = 0
     recommendation_status: str = ""
     recommendation_complete: bool = False
-    recommendation_results: List[RecommendationResult] = []
+    recommendation_results: list[RecommendationResult] = []
 
-    uploaded_posters: List[str] = []
+    uploaded_posters: list[str] = []
     upload_error: str = ""
 
     @rx.event
@@ -264,16 +261,9 @@ class InferenceState(rx.State):
             self.bulk_titles = ""
             return
 
-        titles = [
-            line.strip()
-            for line in self.bulk_titles.splitlines()
-            if line.strip()
-        ]
+        titles = [line.strip() for line in self.bulk_titles.splitlines() if line.strip()]
 
-        existing = {
-            movie.title.strip().lower()
-            for movie in self.recommendation_queue
-        }
+        existing = {movie.title.strip().lower() for movie in self.recommendation_queue}
 
         for title in titles[:remaining]:
             if title.lower() in existing:
@@ -321,9 +311,7 @@ class InferenceState(rx.State):
         available = MAX_CANDIDATES - len(self.recommendation_queue)
 
         if available <= 0:
-            self.upload_error = (
-                f"Maximum candidate limit of {MAX_CANDIDATES} reached."
-            )
+            self.upload_error = f"Maximum candidate limit of {MAX_CANDIDATES} reached."
             return
 
         upload_dir = rx.get_upload_dir()
@@ -363,10 +351,7 @@ class InferenceState(rx.State):
             processed += 1
 
         if len(files) > processed:
-            self.upload_error = (
-                f"Added {processed} files. "
-                f"The candidate limit is {MAX_CANDIDATES}."
-            )
+            self.upload_error = f"Added {processed} files. The candidate limit is {MAX_CANDIDATES}."
 
         self.recommendation_complete = False
         self.recommendation_results = []
@@ -406,9 +391,7 @@ class InferenceState(rx.State):
 
         for index, movie in enumerate(self.recommendation_queue):
             self.recommendation_stage = index + 1
-            self.recommendation_status = (
-                f"Processing {index + 1} of {total}: {movie.title}"
-            )
+            self.recommendation_status = f"Processing {index + 1} of {total}: {movie.title}"
             yield
 
             # Demo delay representing multimodal processing.
@@ -461,6 +444,7 @@ class InferenceState(rx.State):
 # GENERIC COMPONENTS
 # =============================================================================
 
+
 def panel(component, **props):
     return rx.box(
         component,
@@ -494,6 +478,7 @@ def title_block(title, subtitle):
 # =============================================================================
 # SIDEBAR
 # =============================================================================
+
 
 def nav_item(label: str, icon_name: str):
     active = InferenceState.active_nav == label
@@ -592,6 +577,7 @@ def sidebar():
 # HEADER
 # =============================================================================
 
+
 def header():
     return rx.hstack(
         rx.vstack(
@@ -637,6 +623,7 @@ def header():
 # =============================================================================
 # STUDIO
 # =============================================================================
+
 
 def studio_input():
     return rx.vstack(
@@ -1212,6 +1199,7 @@ def studio_page():
 # RECOMMENDATION LAB
 # =============================================================================
 
+
 def upload_dropzone():
     return rx.upload(
         rx.vstack(
@@ -1363,7 +1351,8 @@ def upload_panel():
                         color=TEXT,
                     ),
                     rx.text(
-                        "Use posters, titles, or both. Every candidate is processed before ranking.",
+                        "Use posters, titles, or both. "
+                        "Every candidate is processed before ranking.",
                         size="1",
                         color=MUTED,
                     ),
@@ -1508,7 +1497,8 @@ def candidate_queue():
                         color=TEXT,
                     ),
                     rx.text(
-                        "Nothing is recommended until all candidates pass through the inference stage.",
+                        "Nothing is recommended until all candidates pass "
+                        "through the inference stage.",
                         size="1",
                         color=MUTED,
                     ),
@@ -1604,9 +1594,7 @@ def recommendation_pipeline():
                 rx.progress(
                     value=rx.cond(
                         InferenceState.recommendation_queue.length() > 0,
-                        (
-                            InferenceState.recommendation_stage * 100
-                        )
+                        (InferenceState.recommendation_stage * 100)
                         // InferenceState.recommendation_queue.length(),
                         0,
                     ),
@@ -1823,6 +1811,7 @@ def recommendation_page():
 # DATASET
 # =============================================================================
 
+
 def info_card(title, value, status, accent, icon):
     return panel(
         rx.vstack(
@@ -1928,6 +1917,7 @@ def dataset_page():
 # MODELS
 # =============================================================================
 
+
 def architecture_block(title, model, description, accent):
     return rx.hstack(
         rx.box(
@@ -2029,6 +2019,7 @@ def models_page():
 # EVALUATION
 # =============================================================================
 
+
 def evaluation_page():
     return rx.vstack(
         title_block(
@@ -2113,6 +2104,7 @@ def evaluation_page():
 # SYSTEM
 # =============================================================================
 
+
 def system_page():
     return rx.vstack(
         title_block(
@@ -2155,6 +2147,7 @@ def system_page():
 # =============================================================================
 # APP SHELL
 # =============================================================================
+
 
 def main_content():
     return rx.box(

@@ -63,6 +63,9 @@ cover/
 *.mo
 *.pot
 
+# Tests
+tests/test_pytorch_dataset.py
+
 # Django stuff:
 *.log
 local_settings.py

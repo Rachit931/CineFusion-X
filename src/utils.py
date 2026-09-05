@@ -1,10 +1,11 @@
-import pandas as pd 
+import pandas as pd
 
-# PRINTING 
+# PRINTING
 
-def print_section(title): 
+
+def print_section(title):
     """
-    Prints a formatted section header. 
+    Prints a formatted section header.
     """
 
     print("\n" + "=" * 60)
@@ -12,31 +13,25 @@ def print_section(title):
     print("=" * 60)
 
 
-# Checkpoint Utilities 
+# Checkpoint Utilities
 
-def load_checkpoint(checkpoint_file): 
+
+def load_checkpoint(checkpoint_file):
     """
-    Loads checkpoint if it exists. 
-    
-    Returns: 
-    checkpoint: DataFrame or None 
-    completed: set 
+    Loads checkpoint if it exists.
+
+    Returns:
+    checkpoint: DataFrame or None
+    completed: set
     records: list
     """
 
     if checkpoint_file.exists():
+        checkpoint = pd.read_csv(checkpoint_file)
 
-        checkpoint = pd.read_csv(
-            checkpoint_file
-        )
+        completed = set(checkpoint["imdb_id"])
 
-        completed = set(
-            checkpoint["imdb_id"]
-        )
-
-        records = checkpoint.to_dict(
-            "records"
-        )
+        records = checkpoint.to_dict("records")
 
         return (
             checkpoint,
@@ -52,9 +47,9 @@ def load_checkpoint(checkpoint_file):
 
 
 def save_checkpoint(
-        records,
-        checkpoint_file,
-): 
+    records,
+    checkpoint_file,
+):
     """
     Saves checkpoint
     """
@@ -67,12 +62,13 @@ def save_checkpoint(
     )
 
 
-# CSV Utilities 
+# CSV Utilities
+
 
 def save_dataframe(
-        dataframe,
-        path,
-): 
+    dataframe,
+    path,
+):
     """
     Saves dataframe to CSV.
     """

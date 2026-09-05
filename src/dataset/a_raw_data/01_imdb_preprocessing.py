@@ -1,18 +1,19 @@
-import pandas as pd 
+import pandas as pd
 
-from config.paths import IMDB_DIR 
+from config.paths import IMDB_DIR
 
 MIN_VOTES = 300
 
-def preprocess_imdb(): 
+
+def preprocess_imdb():
     """
-    Preprocess IMDB datasets and creates a clean movie dataset 
-    
-    Input: 
+    Preprocess IMDB datasets and creates a clean movie dataset
+
+    Input:
     1. title.basics.tsv
     2. title.ratings.tsv
-    
-    Output: 
+
+    Output:
     imdb_movies_clean.csv
     """
 
@@ -20,21 +21,21 @@ def preprocess_imdb():
     print("IMDb PREPROCESSING")
     print("=" * 60)
 
-    # Loead IMDB datasets 
+    # Loead IMDB datasets
 
     print("\nLoading IMDB datasets...")
 
     basics = pd.read_csv(
         IMDB_DIR / "title.basics.tsv",
-        sep = "\t",
-        na_values = "\\N",
+        sep="\t",
+        na_values="\\N",
         low_memory=False,
     )
 
     ratings = pd.read_csv(
         IMDB_DIR / "title.ratings.tsv",
-        sep = "\t",
-        na_values = "\\N",
+        sep="\t",
+        na_values="\\N",
         low_memory=False,
     )
 
@@ -42,34 +43,30 @@ def preprocess_imdb():
 
     # Keep only movies (no other formats)
 
-    movies = basics.loc[
-        basics["titleType"] == "movie"
-    ].copy()
+    movies = basics.loc[basics["titleType"] == "movie"].copy()
 
     print(f"Movies: {len(movies):,}")
 
-    # Remove adult movies 
+    # Remove adult movies
 
-    movies = movies.loc[
-        movies["isAdult"] == 0
-    ]
+    movies = movies.loc[movies["isAdult"] == 0]
 
     print(f"Non-adult movies: {len(movies):,}")
 
-    # Keep only required columns 
+    # Keep only required columns
 
     movies = movies[
         [
             "tconst",
             "primaryTitle",
             "originalTitle",
-            "startYear", 
+            "startYear",
             "runtimeMinutes",
             "genres",
         ]
     ]
 
-    # Remove missing values 
+    # Remove missing values
 
     movies = movies.dropna(
         subset=[
@@ -81,12 +78,12 @@ def preprocess_imdb():
 
     print(f"After removing missing values: {len(movies):,}")
 
-    # Convert datatypes 
+    # Convert datatypes
 
     movies["startYear"] = movies["startYear"].astype(int)
     movies["runtimeMinutes"] = movies["runtimeMinutes"].astype(int)
 
-    # Merge ratings 
+    # Merge ratings
 
     imdb = movies.merge(
         ratings,
@@ -96,14 +93,14 @@ def preprocess_imdb():
 
     print(f"After merging ratings: {len(imdb):,}")
 
-    # Rename columns 
+    # Rename columns
 
     imdb = imdb.rename(
         columns={
             "tconst": "imdb_id",
             "primaryTitle": "title",
             "originalTitle": "original_title",
-            "startYear": "release_year", 
+            "startYear": "release_year",
             "runtimeMinutes": "runtime_minutes",
             "averageRating": "rating",
             "numVotes": "num_votes",
@@ -112,24 +109,20 @@ def preprocess_imdb():
 
     # Remove duplicate IMDB IDs
 
-    imdb = imdb.drop_duplicates(
-        subset="imdb_id"
-    )
+    imdb = imdb.drop_duplicates(subset="imdb_id")
 
     print(f"After removing duplicated: {len(imdb):,}")
 
-    # Apply minimum vote threshold 
+    # Apply minimum vote threshold
 
-    imdb = imdb.loc[
-        imdb["num_votes"] >= MIN_VOTES
-    ]
+    imdb = imdb.loc[imdb["num_votes"] >= MIN_VOTES]
 
     print(f"After vote threshold ({MIN_VOTES}): {len(imdb):,}")
 
-    # Sort by popularity 
+    # Sort by popularity
 
     imdb = imdb.sort_values(
-        by = "num_votes",
+        by="num_votes",
         ascending=False,
     ).reset_index(drop=True)
 
@@ -139,7 +132,7 @@ def preprocess_imdb():
 
     imdb.to_csv(
         output_path,
-        index = False,
+        index=False,
         encoding="utf-8",
     )
 

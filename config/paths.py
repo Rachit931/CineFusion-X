@@ -1,23 +1,19 @@
-from pathlib import Path 
-import os 
+import os
+from pathlib import Path
 
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
 
-# Load environment variable from .env 
+# Load environment variable from .env
 
 load_dotenv()
 
 # Root directory containing the dataset
- 
-DATA_ROOT = Path(
-    os.getenv("CINEFUSION_DATA_ROOT", "./data")
-).expanduser().resolve()
 
-PROJECT_ROOT = Path(
-    os.getenv("PROJECT_ROOT")
-).expanduser().resolve()
+DATA_ROOT = Path(os.getenv("CINEFUSION_DATA_ROOT", "./data")).expanduser().resolve()
 
-# RAW DATA 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# RAW DATA
 
 RAW_DIR = DATA_ROOT / "raw"
 
@@ -27,7 +23,7 @@ POSTERS_DIR = RAW_DIR / "posters"
 
 EXTERNAL_DIR = RAW_DIR / "external"
 
-# PROCESSED DATA 
+# PROCESSED DATA
 
 PROCESSED_DIR = DATA_ROOT / "processed"
 
@@ -38,9 +34,9 @@ TARGETS_DIR = PROCESSED_DIR / "targets"
 
 SPLITS_DIR = PROCESSED_DIR / "splits"
 
-S_BOX_OFFICE_SPLIT_DIR =  SPLITS_DIR / "box_office"
-S_CONTENT_RATING_DIR =  SPLITS_DIR / "content_rating"
-S_GENERAL_DIR =  SPLITS_DIR / "general"
+S_BOX_OFFICE_SPLIT_DIR = SPLITS_DIR / "box_office"
+S_CONTENT_RATING_DIR = SPLITS_DIR / "content_rating"
+S_GENERAL_DIR = SPLITS_DIR / "general"
 
 CHECKPOINT_DIR = PROCESSED_DIR / "checkpoints"
 
@@ -52,7 +48,7 @@ BOX_OFFICE_DIR = FEATURE_DIR / "box_office"
 CONTENT_RATING_DIR = FEATURE_DIR / "content_rating"
 GENERAL_DIR = FEATURE_DIR / "general"
 
-# LOGS 
+# LOGS
 
 LOG_DIR = DATA_ROOT / "logs"
 
@@ -62,7 +58,7 @@ ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 
 PREPROCESSOR_DIR = ARTIFACTS_DIR / "preprocessor"
 
-# Automatically create folders 
+# Automatically create folders
 
 DIRECTORIES = [
     IMDB_DIR,
@@ -84,7 +80,8 @@ DIRECTORIES = [
     FEATURE_DIR,
     LOG_DIR,
     PREPROCESSOR_DIR,
+    ARTIFACTS_DIR,
 ]
 
-for directory in DIRECTORIES: 
+for directory in DIRECTORIES:
     directory.mkdir(parents=True, exist_ok=True)
