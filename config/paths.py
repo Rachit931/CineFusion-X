@@ -11,7 +11,7 @@ load_dotenv()
 
 DATA_ROOT = Path(os.getenv("CINEFUSION_DATA_ROOT", "./data")).expanduser().resolve()
 
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT")).expanduser().resolve()
+PROJECT_ROOT = Path(__file__).expanduser().resolve()
 
 # RAW DATA
 
@@ -80,6 +80,7 @@ DIRECTORIES = [
     FEATURE_DIR,
     LOG_DIR,
     PREPROCESSOR_DIR,
+    ARTIFACTS_DIR,
 ]
 
 for directory in DIRECTORIES:

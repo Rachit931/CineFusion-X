@@ -38,6 +38,9 @@ jobs:
       - name: Run detect-secrets
         run: uv run detect-secrets-hook --baseline .secrets.baseline $(git ls-files)
 
+      - name: Show baseline changes
+        if: always()
+        run: git diff -- .secrets.baseline
 
   type-checking:
     runs-on: ubuntu-latest
