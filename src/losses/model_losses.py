@@ -42,10 +42,16 @@ class MultiTaskLoss(nn.Module):
         self.rating_loss_fn = nn.SmoothL1Loss(reduction="none")
 
         # Box office is currently a 4-class classification target.
-        self.box_office_loss_fn = nn.CrossEntropyLoss(reduction="none")
+        self.box_office_loss_fn = nn.CrossEntropyLoss(
+            reduction="none",
+            ignore_index=-1,
+        )
 
         # Content rating is a 4-class classification target.
-        self.content_rating_loss_fn = nn.CrossEntropyLoss(reduction="none")
+        self.content_rating_loss_fn = nn.CrossEntropyLoss(
+            reduction="none",
+            ignore_index=-1,
+        )
 
     def _masked_mean(self, loss, mask):
         """
@@ -77,6 +83,12 @@ class MultiTaskLoss(nn.Module):
 
         while mask.dim() < loss.dim():
             mask = mask.unsqueeze(-1)
+
+        # Making the mask as [B,19] still being 2 dimensional
+        # And due to 19 multi label, the loss could become huge
+        # so making sure the averaging is adequate because
+        # the weight of all four loss is equal.
+        mask = mask.expand_as(loss)
 
         masked_loss = loss * mask
 
@@ -156,8 +168,9 @@ class MultiTaskLoss(nn.Module):
         )
 
         # RATING LOSS
-        # Squeezing the predictn as the dimensionality of both
-        # preidictn & target should be the same as per the regression loss.
+        # Squeezing Cause:
+        # the predictionn as the dimensionality of both
+        # preidictionn & target should be the same as per the regression loss.
         rating_predictions = predictions["rating"].squeeze(-1)
         rating_targets = targets["rating"].float()
         rating_mask = masks["rating"]

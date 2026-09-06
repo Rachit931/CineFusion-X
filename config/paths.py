@@ -58,6 +58,8 @@ ARTIFACTS_DIR = PROJECT_ROOT / "artifacts"
 
 PREPROCESSOR_DIR = ARTIFACTS_DIR / "preprocessor"
 
+PARAMETERS_DIR = ARTIFACTS_DIR / "parameters"
+
 # Automatically create folders
 
 DIRECTORIES = [
@@ -79,8 +81,9 @@ DIRECTORIES = [
     CHECKPOINT_DIR,
     FEATURE_DIR,
     LOG_DIR,
-    PREPROCESSOR_DIR,
     ARTIFACTS_DIR,
+    PREPROCESSOR_DIR,
+    PARAMETERS_DIR,
 ]
 
 for directory in DIRECTORIES:

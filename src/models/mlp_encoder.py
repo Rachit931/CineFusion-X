@@ -16,16 +16,16 @@ class TabularEncoder(nn.Module):
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             # Layer 2
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             # Layer 3
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             # Layer 4
-            nn.Linear(input_dim, hidden_dim),
+            nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             # Layer 5
-            nn.Linear(input_dim, output_dim),
+            nn.Linear(hidden_dim, output_dim),
         )
 
     def forward(self, features):
