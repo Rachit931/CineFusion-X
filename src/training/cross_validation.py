@@ -7,7 +7,6 @@ from sklearn.model_selection import TimeSeriesSplit
 from torch.utils.data import DataLoader, Subset
 
 import src.utils as utils
-from config.paths import PARAM_CHECKPOINT_DIR
 from src.dataset.c_model_data.data_loader import train_dataset
 from src.training.train_phase_1 import train_phase_1
 
@@ -51,8 +50,7 @@ def cross_validate(
     1. Create the train and validation subset.
     2. Create the Dataloaders of those subsets.
     3. Train on Phase-1 model.
-    4. Keep the best epoch for each fold.
-    5. By recording each fold validation loss.
+    4. Record the validation loss for that fold.
 
     Test dataset will not be used.
     """
@@ -113,15 +111,12 @@ def cross_validate(
 
         fold_val_loader = DataLoader(
             fold_val_dataset,
-            batch_dize=BATCH_SIZE,
-            shuffle=True,
+            batch_size=BATCH_SIZE,
+            shuffle=False,
             num_workers=NUM_WORKERS,
             pin_memory=True,
             persistent_workers=(NUM_WORKERS > 0),
         )
-
-        # FOLD CHECKPOINT
-        checkpoint_path = PARAM_CHECKPOINT_DIR / f"phase1_fold_{fold}.pt"
 
         # MLflow FOLD RUN
         with mlflow.start_run(nested=True, run_name=f"fold_{fold}"):
@@ -155,9 +150,9 @@ def cross_validate(
                 tabular_input_dim=tabular_input_dim,
                 learning_rate=config["learning_rate"],
                 epochs=config["epochs"],
-                tabular_hiddem_dim=config["tabular_hidden_dim"],
+                tabular_hidden_dim=config["tabular_hidden_dim"],
                 embedding_dim=config["embedding_dim"],
-                checkpoint_path=checkpoint_path,
+                parameter_path=None,
             )
 
             # ACCUMULATING THE RESULTS
@@ -180,7 +175,6 @@ def cross_validate(
                     "fold": fold,
                     "best_val_loss": fold_best_val_loss,
                     "best_epoch": fold_best_epoch,
-                    "checkpoint_path": str(checkpoint_path),
                 }
             )
 
@@ -210,5 +204,5 @@ def cross_validate(
         "mean_val_loss": mean_val_loss,
         "std_val_loss": std_val_loss,
         "mean_best_epoch": mean_best_epoch,
-        "fod_results": fold_results,
+        "fold_results": fold_results,
     }
