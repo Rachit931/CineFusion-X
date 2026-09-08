@@ -45,6 +45,8 @@ class TaskHeads(nn.Module):
         Output:
             Dictionary containing prediction for
             all four tasks.
+            Shape:
+                [batch size, number of logits as per the task]
         """
 
         genre_logits = self.genre_head(fused_representation)
