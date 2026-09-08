@@ -60,7 +60,7 @@ PREPROCESSOR_DIR = ARTIFACTS_DIR / "preprocessor"
 
 PARAMETERS_DIR = ARTIFACTS_DIR / "parameters"
 
-PARAM_CHECKPOINT_DIR = ARTIFACTS_DIR / "checkpoints"
+MODEL_CONFIG_DIR = ARTIFACTS_DIR / "config"
 
 # Automatically create folders
 
@@ -86,7 +86,7 @@ DIRECTORIES = [
     ARTIFACTS_DIR,
     PREPROCESSOR_DIR,
     PARAMETERS_DIR,
-    PARAM_CHECKPOINT_DIR,
+    MODEL_CONFIG_DIR,
 ]
 
 for directory in DIRECTORIES:

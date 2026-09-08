@@ -53,6 +53,15 @@ class MultiTaskLoss(nn.Module):
             ignore_index=-1,
         )
 
+        """
+        For Multi Class Classification defined loss:
+            The encoding of the targets byt the loss
+            is done in binary with correct class being as 1
+            and others as 0 each point.
+            Regardless of assigning any numbers to each class
+            in the dataset while preprocessing.
+        """
+
     def _masked_mean(self, loss, mask):
         """
         Calculates the mean loss only over valid targets.
@@ -92,6 +101,11 @@ class MultiTaskLoss(nn.Module):
 
         masked_loss = loss * mask
 
+        # Number of points in a batch having valid target.
+        # For Genre, each target is independent.
+        # So each point's contribution value here equals
+        # the no. of labels a point have.
+
         valid_count = mask.sum()
 
         # If there are no valid targets for this task
@@ -100,6 +114,7 @@ class MultiTaskLoss(nn.Module):
         if valid_count.item() == 0:
             return loss.sum() * 0.0
 
+        # Returning average loss for that batch.
         return masked_loss.sum() / valid_count
 
     def forward(
@@ -169,8 +184,8 @@ class MultiTaskLoss(nn.Module):
 
         # RATING LOSS
         # Squeezing Cause:
-        # the predictionn as the dimensionality of both
-        # preidictionn & target should be the same as per the regression loss.
+        # the dimensionality of both preidictionn & target
+        # should be the same as per the regression loss.
         rating_predictions = predictions["rating"].squeeze(-1)
         rating_targets = targets["rating"].float()
         rating_mask = masks["rating"]

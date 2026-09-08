@@ -19,7 +19,7 @@ def train_phase_1(
     epochs,
     tabular_hidden_dim,
     embedding_dim,
-    checkpoint_path,
+    parameter_path=None,
 ):
     """
     Train one Phase-1 configuration on one CV fold.
@@ -188,19 +188,21 @@ def train_phase_1(
             best_val_loss = val_loss
             best_epoch = epoch + 1
 
-            torch.save(
-                {
-                    "epoch": best_epoch,
-                    "model_state_dict": model.state_dict(),
-                    "optimizer_state_dict": optimizer.state_dict(),
-                    "val_loss": best_val_loss,
-                    "tabular_input_dim": tabular_input_dim,
-                    "tabular_hidden_dim": tabular_hidden_dim,
-                    "embedding_dim": embedding_dim,
-                    "learning_rate": learning_rate,
-                },
-                checkpoint_path,
-            )
+            # Saving the best model parameters into the path when not none
+            if parameter_path is not None:
+                torch.save(
+                    {
+                        "epoch": best_epoch,
+                        "model_state_dict": model.state_dict(),
+                        "optimizer_state_dict": optimizer.state_dict(),
+                        "val_loss": best_val_loss,
+                        "tabular_input_dim": tabular_input_dim,
+                        "tabular_hidden_dim": tabular_hidden_dim,
+                        "embedding_dim": embedding_dim,
+                        "learning_rate": learning_rate,
+                    },
+                    parameter_path,
+                )
 
         # CONFIRMATION OUTPUT
         print(f"Epoch [{epoch + 1}/{epochs}]Train Loss: {train_loss:.4f}Val Loss: {val_loss:.4f}")
@@ -217,13 +219,13 @@ def train_phase_1(
         best_epoch,
     )
 
-    mlflow.log_artifact(
-        str(checkpoint_path),
-        artifact_path=checkpoint_path,
-    )
+    if parameter_path is not None:
+        mlflow.log_artifact(
+            str(parameter_path),
+            artifact_path="parameters",
+        )
 
     return {
         "best_val_loss": best_val_loss,
         "best_epoch": best_epoch,
-        "checkpoint_path": checkpoint_path,
     }
