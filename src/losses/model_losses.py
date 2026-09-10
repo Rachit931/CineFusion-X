@@ -32,6 +32,15 @@ class MultiTaskLoss(nn.Module):
         self.content_rating_weight = content_rating_weight
 
         # Loss functions
+        """
+        All these loss functions expects raw logits as input.
+        As sigmoid, softmax functions are applied itnernally
+        to convert into probabilities to calculate the loss.
+
+        So we have to manually convert the logits into the
+        probabilities to get the probabilities for each class
+        for that each point.
+        """
 
         # Genre is multi-label classification
         # All 19 genres has an independent binary target.
