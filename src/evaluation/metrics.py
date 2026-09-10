@@ -132,7 +132,7 @@ def calculate_genre_probabilities(
         zero_division=0,
     )
 
-    metrics["per_genre"] = 0
+    metrics["per_genre"] = {}
 
     for i in range(19):
         metrics["per_genre"][f"genre_{i}"] = {
@@ -250,7 +250,7 @@ def calculate_classfication_metrics(
         zero_division=0,
     )
 
-    metrics["per_class"] = 0
+    metrics["per_class"] = {}
     for class_name in class_names:
         metrics["per_class"][f"class_{class_name}"] = {
             "f1": float(report[class_name]["f1-score"]),
