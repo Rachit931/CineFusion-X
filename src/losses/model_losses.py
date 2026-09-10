@@ -37,8 +37,8 @@ class MultiTaskLoss(nn.Module):
         As sigmoid, softmax functions are applied itnernally
         to convert into probabilities to calculate the loss.
 
-        So we have to manually convert the predictions(logits)in
-        to probabilities to get the probabilities for each class
+        So we have to manually convert the logits into the
+        probabilities to get the probabilities for each class
         for that each point.
         """
 

@@ -1,3 +1,5 @@
+from typing import Any
+
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
@@ -49,7 +51,7 @@ def calculate_genre_probabilities(
     mask=None,
 ):
     """ "
-    Calculate metrics for 19-label multi-label genre classficiation.
+    Calculate metrics for 19-label multi-label genre classificiation.
 
     Probabilities:
         [N,19] sigmoid probabilities for each independent 19 labels.
@@ -83,7 +85,7 @@ def calculate_genre_probabilities(
     predictions = (probabilities >= 0.5).astype(int)
 
     # Overall metrics
-    metrics = {
+    metrics: dict[str, Any] = {
         "macro_f1": float(
             f1_score(
                 targets,
@@ -115,7 +117,7 @@ def calculate_genre_probabilities(
         targets,
         predictions,
         average=None,
-        zer_division=0,
+        zero_division=0,
     )
 
     precision = precision_score(
@@ -147,7 +149,7 @@ def calculate_genre_probabilities(
 # Normal multi class classification
 
 
-def calculate_classfication_metrics(
+def calculate_classification_metrics(
     probabilities,
     targets,
     mask=None,
@@ -195,13 +197,13 @@ def calculate_classfication_metrics(
     if class_names is None:
         class_names = []
         for i in range(num_classes):
-            class_names[i] = f"class_{i}"
+            class_names.append(f"class_{i}")
 
     if len(class_names) != num_classes:
         raise ValueError(f"Expected {num_classes} class names, got {len(class_names)}")
 
     # Overall metrics
-    metrics = {
+    metrics: dict[str, Any] = {
         "macro_f1": float(
             f1_score(
                 targets,
@@ -245,7 +247,7 @@ def calculate_classfication_metrics(
         targets,
         predictions,
         labels=np.arange(num_classes),
-        targets_names=class_names,
+        target_names=class_names,
         output_dict=True,
         zero_division=0,
     )
@@ -280,7 +282,7 @@ def calculate_box_office_metrics(
     3 = Blockbuster
     """
 
-    return calculate_classfication_metrics(
+    return calculate_classification_metrics(
         probabilities=probabilities,
         targets=targets,
         mask=mask,
@@ -311,7 +313,7 @@ def calculate_content_rating_metrics(
     3 = R
     """
 
-    return calculate_classfication_metrics(
+    return calculate_classification_metrics(
         probabilities=probabilities,
         targets=targets,
         mask=mask,
@@ -398,18 +400,15 @@ def get_classification_outputs(
 
     class_names = []
     for i in range(num_classes):
-        class_names[i] = f"class_{i}"
+        class_names.append(f"class_{i}")
 
     if len(class_names) != num_classes:
         raise ValueError(f"Expected {num_classes} class names, got {len(class_names)}")
 
     return {
         "predictions": predictions,
-        "confusion_matrix": confusion_matrix(targets, probabilities, labels=np.arange(num_classes)),
+        "confusion_matrix": confusion_matrix(targets, predictions, labels=np.arange(num_classes)),
         "classification_report": classification_report(
-            targets, predictions, labels=np.arange(num_classes)
-        ),
-        "classfication_report": classification_report(
             targets,
             predictions,
             labels=np.arange(num_classes),
