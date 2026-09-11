@@ -1,5 +1,6 @@
 import mlflow
 import torch
+
 from src.evaluation.metrics import (
     calculate_box_office_metrics,
     calculate_content_rating_metrics,
@@ -7,7 +8,6 @@ from src.evaluation.metrics import (
     calculate_rating_metrics,
     compute_composite_score,
 )
-
 from src.losses.model_losses import MultiTaskLoss
 from src.models.cinefusion_model import CineFusionModel
 
