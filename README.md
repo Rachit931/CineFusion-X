@@ -343,7 +343,7 @@ L_phase1 = L_task
 
 ---
 
-### `model_losses.py`  ---- CURRENTLY HERE.
+### `model_losses.py` 
 
 Handles the supervised multitask objective.
 
@@ -372,134 +372,21 @@ A missing target is ignored for its specific task instead of removing the entire
 
 ### `train_phase_1.py`
 
-Runs Phase-1 training.
+train_phase_1.py is responsible for executing one actual Phase 1 training run on one train/validation split. It receives the DataLoaders and hyperparameters, creates the CineFusionModel, MultiTaskLoss, and AdamW optimizer, then iterates through the requested number of epochs. For every epoch it trains batch-by-batch using the multitask masked loss, then switches to evaluation mode and processes the validation set. The validation outputs from all batches are collected and concatenated so that Genre, Rating, Box Office, and Content Rating metrics are calculated on the complete validation fold. These task metrics are then combined into the composite score, and the epoch with the highest composite score becomes the best epoch. When a checkpoint path is supplied, the model and optimizer states plus relevant training metadata are saved through torch.save().
 
-Responsibilities:
-
-- Load batches from the DataLoader.
-- Run the complete model forward pass.
-- Calculate the supervised multitask loss.
-- Backpropagate.
-- Update trainable parameters.
-- Track training progress.
-- Track development-side performance according to the project evaluation procedure.
-- Save the best Phase-1 checkpoint.
-
-The trainable components include:
-
-- ViT
-- BERT
-- Tabular MLP
-- Cross-Attention
-- Task Heads
-
----
-
-### Phase-1 Checkpoint
-
-The best Phase-1 checkpoint stores the learned state of the complete multimodal model.
-
-It contains the learned parameters of:
-
-```text
-ViT
-BERT
-Tabular MLP
-Cross-Attention
-Task Heads
-```
-
-This checkpoint becomes the initialization point for Phase 2.
-
-It is **not** the final test checkpoint.
-
----
-
-# 3. Cross-Validation + Hyperparameter Tuning
-
-After a working Phase-1 training pipeline exists, model selection is performed on the **development data**.
-
-```text
-Phase-1 Model / Checkpoint
-          ↓
-hyperparameter_tuning.py
-          ↓
-candidate configuration
-          ↓
-cross_validation.py
-          ↓
-metrics.py
-          ↓
-CV results
-          ↓
-compare configurations
-          ↓
-Best Configuration
-```
-
-The test set is not used for this stage.
-
----
+From the MLflow perspective, this file is responsible for training-related metrics and the checkpoint artifact, not for defining the overall Optuna search. In CV mode (return_full_metrics=False), it keeps the run lightweight and logs the best validation loss, best epoch, and best composite score once for that fold. In detailed best-configuration mode (return_full_metrics=True), it additionally logs epoch-by-epoch train loss, validation loss, and composite score, followed by overall task metrics and all per-genre/per-class metrics. If a checkpoint path is provided, the saved checkpoint is also registered as an MLflow artifact. The function finally returns only the best composite score in CV mode, while returning the complete best_metrics dictionary in detailed mode.
 
 ### `cross_validation.py`
 
-Evaluates a candidate configuration across multiple development folds.
+cross_validation.py is responsible for evaluating one hyperparameter configuration across multiple time-ordered folds. It creates a TimeSeriesSplit, generates the training and validation indices for each fold, builds Subset objects and their DataLoaders, and then calls train_phase_1() once for each fold with return_full_metrics=False. Each fold therefore trains its own model and returns only its best composite score to the cross-validation layer. The five fold scores are collected and then aggregated into the mean and standard deviation of the composite score. These aggregated values represent how well that one configuration performs across the different time-ordered validation splits, and the mean composite score is the value that the hyperparameter-search layer uses for comparison. Test data is never involved in this process.
 
-Responsibilities:
+MLflow here is used at the fold level and configuration/CV-summary level. Each fold is created as a nested MLflow run, where the fold number, number of splits, seed, batch size, device, and the hyperparameter configuration being evaluated are recorded. The actual best-fold training metrics such as best_val_loss, best_epoch, and best_composite_score are produced by train_phase_1(). After all five folds finish, cross_validation.py aggregates their composite scores and logs the configuration-level mean_cv_composite_score and std_cv_composite_score. Thus, this file provides the MLflow hierarchy that lets you inspect individual folds while still having a single aggregated result for the configuration.
 
-- Create development folds.
-- Train/evaluate the candidate configuration on each fold.
-- Collect fold-level metrics.
-- Aggregate cross-validation results.
-- Provide results to the hyperparameter-selection process.
+### `hyperp_tuning.py`
 
-The test set remains untouched.
+hyperp_tuning.py is the top-level Phase 1 search and orchestration layer. It creates the Optuna study, defines the search space through trial.suggest_float, trial.suggest_int, and trial.suggest_categorical, and repeatedly calls the cross-validation pipeline for each trial. Each trial therefore represents one candidate hyperparameter configuration, and its objective is the mean composite score returned by cross-validation. Optuna compares these trial results and selects the configuration with the highest mean CV composite score. Once the winning configuration is identified, this file saves phase1_best_config.json, creates the final Phase 1 train/validation split for the detailed run, calls train_phase_1() again with return_full_metrics=True, and saves the returned complete best_metrics as phase1_best_metrics.json. It also preserves the overall Optuna/CV search history in phase1_cv_results.json.
 
----
-
-### `hyperparameter_tuning.py`
-
-Controls the search over candidate configurations.
-
-Responsibilities:
-
-- Generate candidate hyperparameter configurations.
-- Run/evaluate them through cross-validation.
-- Compare their cross-validation performance.
-- Select the best configuration.
-
-Possible parameters include:
-
-- Learning rates
-- Dropout
-- Model dimensions
-- Attention dimensions
-- Task-loss weights
-- Other model/training settings
-
-The result is:
-
-```text
-Best Configuration
-```
-
----
-
-### `metrics.py`
-
-Contains reusable metric calculations.
-
-It is not a separate training stage.
-
-It is used by the model-selection and final-evaluation pipelines.
-
-Responsibilities:
-
-- Calculate task-specific evaluation metrics.
-- Respect task-specific target masks.
-- Provide consistent metric calculations across cross-validation and final testing.
-
----
+MLflow in hyperp_tuning.py operates at the highest level, representing the Optuna trial and the final selected configuration. A parent trial run records the candidate hyperparameters, while the nested fold runs created by cross_validation.py contain the detailed fold-level information. The trial ultimately receives the aggregated mean CV composite score that determines which configuration wins. After Optuna chooses the winner, a separate nested phase1_best_configuration run records the selected configuration and the detailed training history and metrics generated by train_phase_1(). The final JSON artifacts are saved by the filesystem side of this orchestration, while MLflow tracks the experiment history and the relevant artifacts. The checkpoint itself is owned by train_phase_1.py; hyperp_tuning.py should not upload that same checkpoint a second time.
 
 # 4. Phase 2 — Multimodal Alignment + Joint Optimization
 
