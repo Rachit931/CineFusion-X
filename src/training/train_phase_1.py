@@ -68,11 +68,7 @@ def train_phase_1(
     # MLflow Parameters
     mlflow.log_params(
         {
-            "learning_rate": learning_rate,
-            "epochs": epochs,
             "tabular_input_dim": tabular_input_dim,
-            "tabular_hidden_dim": tabular_hidden_dim,
-            "embedding_dim": embedding_dim,
             "device": str(DEVICE),
             "rating_max_error": rating_max_error,
             "return_full_metrics": return_full_metrics,
