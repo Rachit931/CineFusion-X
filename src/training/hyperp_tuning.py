@@ -273,6 +273,9 @@ def run_phase1_hyperparameter_tuning(
 
         best_config = dict(best_trial.params)
 
+        if best_trial.value is None:
+            raise RuntimeError("Best Optuna trial has no objective value.")
+
         best_cv_composite_score = float(best_trial.value)
 
         # SAVE BEST CONFIG
