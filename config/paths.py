@@ -62,6 +62,7 @@ PARAMETERS_DIR = ARTIFACTS_DIR / "parameters"
 
 MODEL_CONFIG_DIR = ARTIFACTS_DIR / "config"
 
+METRICS_DIR = ARTIFACTS_DIR / "metrics"
 # Automatically create folders
 
 DIRECTORIES = [
@@ -87,6 +88,7 @@ DIRECTORIES = [
     PREPROCESSOR_DIR,
     PARAMETERS_DIR,
     MODEL_CONFIG_DIR,
+    METRICS_DIR,
 ]
 
 for directory in DIRECTORIES:

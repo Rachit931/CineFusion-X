@@ -6,7 +6,7 @@ class TabularEncoder(nn.Module):
     MLP as an encoder for the tabular features
     """
 
-    def __init__(self, input_dim, hidden_dim, output_dim):
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout):
 
         super().__init__()
 
@@ -15,15 +15,19 @@ class TabularEncoder(nn.Module):
             # Layer 1
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             # Layer 2
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             # Layer 3
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             # Layer 4
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
+            nn.Dropout(dropout),
             # Layer 5
             nn.Linear(hidden_dim, output_dim),
         )

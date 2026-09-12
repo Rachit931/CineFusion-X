@@ -1,5 +1,6 @@
 import mlflow
 import torch
+
 from src.evaluation.metrics import (
     calculate_box_office_metrics,
     calculate_content_rating_metrics,
@@ -7,7 +8,6 @@ from src.evaluation.metrics import (
     calculate_rating_metrics,
     compute_composite_score,
 )
-
 from src.losses.model_losses import MultiTaskLoss
 from src.models.cinefusion_model import CineFusionModel
 
@@ -68,11 +68,7 @@ def train_phase_1(
     # MLflow Parameters
     mlflow.log_params(
         {
-            "learning_rate": learning_rate,
-            "epochs": epochs,
             "tabular_input_dim": tabular_input_dim,
-            "tabular_hidden_dim": tabular_hidden_dim,
-            "embedding_dim": embedding_dim,
             "device": str(DEVICE),
             "rating_max_error": rating_max_error,
             "return_full_metrics": return_full_metrics,

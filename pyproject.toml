@@ -13,6 +13,7 @@ dependencies = [
     "matplotlib>=3.11.1",
     "mlflow>=3.16.0",
     "mp-api>=0.46.4",
+    "optuna>=5.0.0",
     "pandas>=3.0.3",
     "pillow>=12.3.0",
     "pre-commit>=4.6.2",

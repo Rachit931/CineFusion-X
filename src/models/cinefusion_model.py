@@ -31,7 +31,10 @@ class CineFusionModel(nn.Module):
 
         # Tabular Encoder
         self.tabular_encoder = TabularEncoder(
-            input_dim=tabular_input_dim, hidden_dim=tabular_hidden_dim, output_dim=embedding_dim
+            input_dim=tabular_input_dim,
+            hidden_dim=tabular_hidden_dim,
+            output_dim=embedding_dim,
+            dropout=0.1,
         )
 
         # Multimodel attention
