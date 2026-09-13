@@ -12,7 +12,7 @@ from src.training.train_phase_1 import train_phase_1
 # Configuration
 
 BATCH_SIZE = 20
-NUM_WORKERS = 8
+NUM_WORKERS = 4
 N_SPLITS = 5
 
 # Baseline hyperparameters
