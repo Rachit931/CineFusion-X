@@ -1,6 +1,8 @@
 import mlflow
 import torch
 
+from tqdm.auto import tqdm 
+
 from src.evaluation.metrics import (
     calculate_box_office_metrics,
     calculate_content_rating_metrics,
@@ -86,7 +88,7 @@ def train_phase_1(
 
         running_train_loss = 0.0
 
-        for batch in train_loader:
+        for batch_idx, batch in enumerate(train_loader, start=1):
             pixel_values = batch["pixel_values"].to(DEVICE)
             input_ids = batch["input_ids"].to(DEVICE)
             attention_mask = batch["attention_mask"].to(DEVICE)
@@ -126,6 +128,14 @@ def train_phase_1(
 
             total_loss = losses["total_loss"]
 
+            print(
+                f"\rEpoch {epoch + 1}/{epochs} | "
+                f"Batch {batch_idx}/{len(train_loader)} | "
+                f"Loss: {total_loss.item():.4f}",
+                end="",
+                flush=True,
+            )
+            
             # Backpropogation
             total_loss.backward()
 
@@ -133,6 +143,8 @@ def train_phase_1(
             optimizer.step()
 
             running_train_loss += total_loss.item()
+
+        print()
 
         train_loss = running_train_loss / len(train_loader)
 

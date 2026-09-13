@@ -15,7 +15,7 @@ from src.training.train_phase_1 import train_phase_1
 N_SPLITS = 5
 
 BATCH_SIZE = 20
-NUM_WORKERS = 8
+NUM_WORKERS = 4
 
 SEED = 42
 
