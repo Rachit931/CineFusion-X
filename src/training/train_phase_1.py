@@ -1,8 +1,6 @@
 import mlflow
 import torch
 
-from tqdm.auto import tqdm 
-
 from src.evaluation.metrics import (
     calculate_box_office_metrics,
     calculate_content_rating_metrics,
@@ -112,12 +110,13 @@ def train_phase_1(
             optimizer.zero_grad()
 
             # Forward pass
-            outputs = model(
-                pixel_values=pixel_values,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                features=features,
-            )
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                outputs = model(
+                    pixel_values=pixel_values,
+                    input_ids=input_ids,
+                    attention_mask=attention_mask,
+                    features=features,
+                )
 
             # Calculate the multitasked masked loss
             losses = criterion(
@@ -135,7 +134,7 @@ def train_phase_1(
                 end="",
                 flush=True,
             )
-            
+
             # Backpropogation
             total_loss.backward()
 
@@ -195,12 +194,13 @@ def train_phase_1(
                 }
 
                 # Forward pass
-                outputs = model(
-                    pixel_values=pixel_values,
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
-                    features=features,
-                )
+                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                    outputs = model(
+                        pixel_values=pixel_values,
+                        input_ids=input_ids,
+                        attention_mask=attention_mask,
+                        features=features,
+                    )
 
                 # Validation loss
                 losses = criterion(

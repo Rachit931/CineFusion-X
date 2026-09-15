@@ -13,7 +13,7 @@ class MovieDataset(Dataset):
         vit_image_transform,
         bert_tokenizer,
         poster_dir,
-        max_text_length=512,
+        max_text_length=256,
     ):
 
         # Load the featurized dataset
@@ -104,7 +104,7 @@ class MovieDataset(Dataset):
         # Basic cleaning of overviews
         overview = self.data["overview"].fillna("").astype(str).tolist()
 
-        # TOkenizing all the overview text at once
+        # Tokenizing all the overview text at once
         tokenized = self.tokenizer(
             overview,
             padding="max_length",
