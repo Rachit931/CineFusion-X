@@ -12,9 +12,9 @@ from src.training.train_phase_1 import train_phase_1
 
 # CONFIGURATION
 
-N_SPLITS = 5
+N_SPLITS = 3
 
-BATCH_SIZE = 20
+BATCH_SIZE = 16
 NUM_WORKERS = 4
 
 SEED = 42

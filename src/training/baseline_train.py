@@ -11,7 +11,7 @@ from src.training.train_phase_1 import train_phase_1
 
 # Configuration
 
-BATCH_SIZE = 20
+BATCH_SIZE = 16
 NUM_WORKERS = 4
 N_SPLITS = 5
 
@@ -19,7 +19,7 @@ N_SPLITS = 5
 
 BASELINE_CONFIG = {
     "learning_rate": 5e-5,
-    "epochs": 400,
+    "epochs": 100,
     "tabular_hidden_dim": 512,
     "embedding_dim": 256,
 }

@@ -1,9 +1,9 @@
-import os 
+import os
+
 import timm
+from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
-
-from dotenv import load_dotenv
 
 from config.paths import GENERAL_DIR, POSTERS_DIR
 from src.dataset.c_model_data.custom_dataset import (
@@ -39,10 +39,7 @@ BERT_MODEL = "bert-base-uncased"
 
 # And loads all the processing required for the text to be given input into our BERT
 # by applying BERT's tokenizers as processing
-bert_tokenizer = AutoTokenizer.from_pretrained(
-    BERT_MODEL,
-    token=hf_token
-)
+bert_tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL, token=hf_token)
 
 
 # Create train dataset

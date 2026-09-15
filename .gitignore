@@ -88,6 +88,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+notebooks/training.ipynb
 notebooks/experiments.ipynb
 notebooks/model_testing.ipynb
 
