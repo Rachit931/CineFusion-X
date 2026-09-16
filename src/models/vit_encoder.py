@@ -3,6 +3,7 @@ from typing import cast
 import timm
 import torch
 import torch.nn as nn
+from timm.models.vision_transformer import VisionTransformer
 
 
 class ViTEncoder(nn.Module):
@@ -14,7 +15,10 @@ class ViTEncoder(nn.Module):
         super().__init__()
 
         # Loading MAE-pretrained ViT-B/16
-        self.vit = timm.create_model("vit_base_patch16_224.mae", pretrained=True, num_classes=0)
+        self.vit = cast(
+            VisionTransformer,
+            timm.create_model("vit_base_patch16_224.mae", pretrained=True, num_classes=0),
+        )
 
         # Number of Transformers blocks in ViT
         self.total_blocks = len(self.vit.blocks)
@@ -36,9 +40,11 @@ class ViTEncoder(nn.Module):
         if self.trainable_blocks > 0:
             start_block = self.total_blocks - self.trainable_blocks
 
-            for block in self.vit.blocks[start_block:]:
+            blocks = list(self.vit.blocks)[start_block:]
+
+            for block in blocks:
                 for param in block.parameters():
-                    param.requires_grad = False
+                    param.requires_grad = True
 
         # Model's patches dimensionality reduction
         vit_dim = cast(int, self.vit.num_features)
