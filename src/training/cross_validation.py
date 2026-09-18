@@ -145,17 +145,15 @@ def cross_validate(
                 }
             )
 
-            # Logging the current configuration that is being evaluation for a particular fold
-            mlflow.log_params(config)
-
             # TRAIN ONE FOLD
             # For one fold: best composite score, best epoch, best val loss out of all the epoch
 
-            fold_composite_score, best_epoch, best_val_loss = train_phase_1(
+            fold_composite_score, best_epoch, val_loss_at_best_epoch = train_phase_1(
                 train_loader=fold_train_loader,
                 val_loader=fold_val_loader,
                 tabular_input_dim=tabular_input_dim,
                 learning_rate=config["learning_rate"],
+                weight_decay=config["weight_decay"],
                 epochs=config["epochs"],
                 tabular_hidden_dim=config["tabular_hidden_dim"],
                 embedding_dim=config["embedding_dim"],
@@ -178,7 +176,7 @@ def cross_validate(
                 {
                     "best_composite_score": float(fold_composite_score),
                     "best_epoch": int(best_epoch),
-                    "best_val_loss": float(best_val_loss),
+                    "best_val_loss": float(val_loss_at_best_epoch),
                 }
             )
 
@@ -187,7 +185,7 @@ def cross_validate(
                     "fold": fold,
                     "composite_score": float(fold_composite_score),
                     "best_epoch": int(best_epoch),
-                    "val_loss": float(best_val_loss),
+                    "val_loss_at_best_epoch": float(val_loss_at_best_epoch),
                 }
             )
 
@@ -209,7 +207,7 @@ def cross_validate(
 
     val_losses = []
     for result in fold_results:
-        val_losses.append(result["val_loss"])
+        val_losses.append(result["val_loss_at_best_epoch"])
 
     mean_composite_score = float(np.mean(composite_scores))
 
@@ -252,5 +250,6 @@ def cross_validate(
         "mean_composite_score": mean_composite_score,
         "std_composite_score": std_composite_score,
         "mean_best_epoch": mean_best_epoch,
+        "mean_val_loss": mean_val_loss,
         "fold_results": fold_results,
     }

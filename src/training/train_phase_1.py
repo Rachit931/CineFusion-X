@@ -23,6 +23,7 @@ def train_phase_1(
     val_loader,
     tabular_input_dim,
     learning_rate,
+    weight_decay,
     epochs,
     tabular_hidden_dim,
     embedding_dim,
@@ -38,7 +39,7 @@ def train_phase_1(
         L_phase1 = L_task
 
     Returns: tuple
-        best_composte_score, best_epoch
+        best_composte_score, best_epoch, val_loss_at_best_epoch
     """
 
     # Model
@@ -63,6 +64,7 @@ def train_phase_1(
     optimizer = torch.optim.AdamW(
         trainable_parameters,
         lr=learning_rate,
+        weight_decay=weight_decay,
     )
 
     # LERNING-RATE SCHEDULAR
@@ -79,7 +81,7 @@ def train_phase_1(
 
     # BEST VALIDATION LOSS & BEST EPOCH TRACKING
     best_composite_score = float("-inf")
-    best_val_loss = float("inf")
+    val_loss_at_best_epoch = float("inf")
     best_epoch = 0
 
     # EPOCH LOOP
@@ -388,7 +390,7 @@ def train_phase_1(
 
         if composite_score > best_composite_score:
             best_composite_score = composite_score
-            best_val_loss = val_loss
+            val_loss_at_best_epoch = val_loss
             best_epoch = epoch + 1
 
             # Reset early-stopping counter because the model improved.
@@ -415,4 +417,4 @@ def train_phase_1(
 
     # RETURN
 
-    return best_composite_score, best_epoch, best_val_loss
+    return best_composite_score, best_epoch, val_loss_at_best_epoch
