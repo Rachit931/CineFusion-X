@@ -15,6 +15,7 @@ from src.models.cinefusion_model import CineFusionModel
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 # PHASE 1 TRAINING
 
 
@@ -60,10 +61,28 @@ def train_phase_1(
     criterion = MultiTaskLoss()
 
     # OPTIMIZER
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
+    trainable_parameters = []
+
+    for parameter in model.parameters():
+        if parameter.requires_grad():
+            trainable_parameters += parameter
+
+    optimizer = torch.optim.adamw(
+        trainable_parameters,
         lr=learning_rate,
     )
+
+    # LERNING-RATE SCHEDULAR
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        model="max",
+        factor=0.5,
+        patience=3,
+    )
+
+    # EARLY STOPPING
+    early_stopping_patience = 15
+    epochs_without_improvement = 0
 
     # MLflow Parameters
     mlflow.log_params(
@@ -110,6 +129,7 @@ def train_phase_1(
             optimizer.zero_grad()
 
             # Forward pass
+            # Using Mixed Precision training with FP16/BF16 instead of purely FP32
             with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
                 outputs = model(
                     pixel_values=pixel_values,
@@ -364,6 +384,13 @@ def train_phase_1(
             rating_max_error=rating_max_error,
         )
 
+        # Learning-rate scheduler
+        # Internally checking the composite score if have increased or not.
+        scheduler.step(composite_score)
+
+        # stores the current learning rate
+        current_learning_rate = optimizer.param_groups[0]["lr"]
+
         # SAVE THE BEST EPOCH FOR THIS FOLD.
         # BASED ON THE COMPOSITE SCORE(NOT VAL_LOSS)
 
@@ -371,6 +398,9 @@ def train_phase_1(
             best_composite_score = composite_score
             best_val_loss = val_loss
             best_epoch = epoch + 1
+
+            # Reset early-stopping counter because the model improved.
+            epochs_without_improvement = 0
 
             # Saving all of the metrics for the best epoch
             # in the memory for each fold
@@ -405,6 +435,10 @@ def train_phase_1(
                     parameter_path,
                 )
 
+        else:
+            # No improvement in validation composite score.
+            epochs_without_improvement += 1
+
         # MLFLOW EPOCH LOGGING
 
         # Detailed metrics logged
@@ -416,6 +450,7 @@ def train_phase_1(
                     "train_loss": train_loss,
                     "val_loss": val_loss,
                     "composite_score": composite_score,
+                    "learning_rate": current_learning_rate,
                 },
                 step=epoch + 1,
             )
@@ -426,7 +461,25 @@ def train_phase_1(
             f"Train Loss: {train_loss:.4f}"
             f"Val Loss: {val_loss:.4f}"
             f"Composite: {composite_score:.4f}"
+            f"LR: {current_learning_rate:.6g}"
         )
+
+        # EARLY STOPPING
+        if epochs_without_improvement >= early_stopping_patience:
+            print(f"Early stopping triggered after {epoch + 1} epochs. Best epoch: {best_epoch}")
+            break
+
+    # RESTORE BEST CHECKPOINT
+
+    # Restore the best model state found during training.
+    if parameter_path is not None:
+        checkpoint = torch.load(
+            parameter_path,
+            map_location=DEVICE,
+            weights_only=False,
+        )
+
+        model.load_state_dict(checkpoint["model_state_dict"])
 
     # SAFETY CHECK
     if best_metrics is None:
@@ -514,6 +567,8 @@ def train_phase_1(
             content_rating_metrics[f"{class_name}_precision"] = class_values["precision"]
             content_rating_metrics[f"{class_name}_recall"] = class_values["recall"]
             content_rating_metrics[f"{class_name}_support"] = class_values["support"]
+
+        mlflow.log_metrics(content_rating_metrics)
 
     # CHECKPOINT ARTIFACT
 

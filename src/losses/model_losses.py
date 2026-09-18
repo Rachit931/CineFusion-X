@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 
@@ -13,14 +14,23 @@ class MultiTaskLoss(nn.Module):
 
     Points with missing targets are handled
     during training through the task-specific masks.
+
+    As per the class distribution, Content-Rating classification
+    uses class weights to reduce the effectd of class imbalance.
     """
 
     def __init__(
         self,
-        genre_weight=1.0,
-        rating_weight=1.0,
-        box_office_weight=1.0,
-        content_rating_weight=1.0,
+        genre_weight: float = 1.0,
+        rating_weight: float = 1.0,
+        box_office_weight: float = 1.0,
+        content_rating_weight: float = 1.0,
+        content_rating_class_weights: tuple[float, ...] = (
+            1.8,
+            0.9,
+            0.8,
+            0.5,
+        ),
     ):
 
         super().__init__()
@@ -30,6 +40,24 @@ class MultiTaskLoss(nn.Module):
         self.rating_weight = rating_weight
         self.box_office_weight = box_office_weight
         self.content_rating_weight = content_rating_weight
+
+        # Validating the content-rating class weights
+
+        if len(content_rating_class_weights) != 4:
+            raise ValueError("content_rating_class_weights must contan exact 4 values")
+
+        if any(weight <= 0 for weight in content_rating_class_weights):
+            raise ValueError("All content-rating class weights must be greater than 0")
+
+        # Registering these weights as buffer so that they aren't
+        # tracked or updated
+        self.register_buffer(
+            "content_rating_class_weights",
+            torch.tensor(
+                content_rating_class_weights,
+                dtype=torch.float32,
+            ),
+        )
 
         # Loss functions
         """
@@ -58,6 +86,7 @@ class MultiTaskLoss(nn.Module):
 
         # Content rating is a 4-class classification target.
         self.content_rating_loss_fn = nn.CrossEntropyLoss(
+            weight=self.content_rating_class_weights,
             reduction="none",
             ignore_index=-1,
         )

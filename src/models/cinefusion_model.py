@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 
 from src.models.bert_encoder import BERTEncoder
@@ -10,13 +11,21 @@ from src.models.vit_encoder import ViTEncoder
 class CineFusionModel(nn.Module):
     """
     Complete Model in Phase 1:
+        - ViT backbone frozen
+        - BERT backbone frozen
+        - ViT/BERT projection layers trainable
+        - Tabular encoder trainable
+        - Multimodal attention trainable
+        - Task heads trainable
     """
 
     def __init__(
         self,
-        tabular_input_dim,
-        tabular_hidden_dim=256,
-        embedding_dim=256,
+        tabular_input_dim: int,
+        tabular_hidden_dim: int = 256,
+        embedding_dim: int = 256,
+        trainable_vit_blocks: int = 0,
+        trainable_bert_layers: int = 0,
     ):
 
         super().__init__()
@@ -24,10 +33,14 @@ class CineFusionModel(nn.Module):
         # Visual Encoder
         self.vit_encoder = ViTEncoder(
             output_dim=embedding_dim,
+            trainable_blocks=trainable_vit_blocks,
         )
 
         # Text Encoder
-        self.bert_encoder = BERTEncoder(output_dim=embedding_dim)
+        self.bert_encoder = BERTEncoder(
+            output_dim=embedding_dim,
+            trainable_layers=trainable_bert_layers,
+        )
 
         # Tabular Encoder
         self.tabular_encoder = TabularEncoder(
@@ -45,7 +58,13 @@ class CineFusionModel(nn.Module):
         # Task Heads
         self.task_heads = TaskHeads(input_dim=embedding_dim)
 
-    def forward(self, pixel_values, input_ids, attention_mask, features):
+    def forward(
+        self,
+        pixel_values: torch.tensor,
+        input_ids: torch.tensor,
+        attention_mask: torch.tensor,
+        features: torch.tensor,
+    ):
         """
         Inputs:
             pixel_values:
