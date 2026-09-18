@@ -4,36 +4,149 @@
 
 CineFusion-X is a multimodal, multitask movie intelligence system that combines:
 
-- Movie posters
-- Movie overview / plot text
-- Structured movie metadata
+- **Movie posters** → visual information
+- **Movie overview / plot text** → textual information
+- **Structured movie metadata** → tabular information
 
-The model learns separate visual, textual, and tabular representations, fuses them with cross-attention, and performs four movie-level tasks:
+The system learns a representation from each modality, aligns the modalities during Phase 2, fuses them through multimodal attention, and predicts four movie-level tasks:
 
-- **Genre** — multi-label classification
-- **Rating** — regression
-- **Revenue / Box Office** — regression
-- **Certification / Content Rating** — multiclass classification
+| Task | Type | Output |
+|---|---|---|
+| Genre | Multi-label classification | 19 independent genre probabilities |
+| Rating | Regression | Continuous rating prediction |
+| Box Office | 4-class classification | Flop / Average / Hit / Blockbuster |
+| Content Rating | 4-class classification | G / PG / PG-13 / R |
 
-The training strategy has two phases:
+The training and evaluation strategy is:
 
 ```text
-Phase 1 → Task-Only Training
-        ↓
-Cross-Validation + Hyperparameter Tuning
-        ↓
-Phase 2 → Multimodal Alignment + Joint Optimization
-        ↓
-Final Test Evaluation
+Development Data
+      ↓
+Phase 1: Task-Only Training
+      ↓
+TimeSeries Cross-Validation + Optuna
+      ↓
+Best Phase-1 Configuration
+      ↓
+Final Phase-1 Training on ALL Development Data
+      ↓
+Best Phase-1 Checkpoint
+      ↓
+Phase 2: Alignment + Joint Optimization
+      ↓
+Final Phase-2 Model
+      ↓
+Development Calibration
+      ↓
+Temperature Scaling + Genre Threshold Finding
+      ↓
+Locked Calibration Parameters
+      ↓
+Untouched 2019+ Test Set
+      ↓
+Final Metrics + Optional Uncertainty
 ```
+
+The **test set is never used for training, hyperparameter selection, checkpoint selection, threshold finding, calibration, or early stopping**.
 
 ---
 
-# Project Pipeline
+# 1. Data Split and Leakage Policy
 
-## 0. Data Preparation
+The project uses a chronological movie-level split:
 
-These files prepare the data before any neural-network training begins.
+```text
+release_year < 2019  → Development
+release_year >= 2019 → Test
+```
+
+The split is performed by movie identifier (`imdb_id`) so that the same movie cannot appear in both partitions.
+
+```text
+                    ALL MOVIES
+                        │
+            ┌───────────┴───────────┐
+            │                       │
+            ▼                       ▼
+     DEVELOPMENT                 TEST
+     < 2019                      >= 2019
+            │                       │
+     CV / Optuna /            FINAL EVALUATION
+     Phase 1 / Phase 2
+     / calibration
+```
+
+## Leakage rules
+
+The test set must not be used for:
+
+- model training
+- cross-validation
+- Optuna trials
+- hyperparameter selection
+- checkpoint selection
+- early stopping
+- threshold finding
+- temperature scaling
+- uncertainty configuration
+- preprocessing fitting
+- feature-scaling fitting
+- category mapping creation
+- decision-rule tuning
+
+The test set is used only after the model-selection and calibration pipeline is locked.
+
+---
+
+# 2. Project Structure
+
+```text
+src/
+├── dataset/
+│   ├── 08_create_targets.py
+│   ├── 09_split_dataset.py
+│   ├── preprocessing.py
+│   ├── featurization.py
+│   ├── custom_dataset.py
+│   ├── data_loader.py
+│   └── validate_dataset.py
+│
+├── models/
+│   ├── vit_encoder.py
+│   ├── bert_encoder.py
+│   ├── tabular_encoder.py
+│   ├── cross_attention.py
+│   ├── task_heads.py
+│   ├── cinefusion_model.py
+│   └── contrastive_loss.py
+│
+├── losses/
+│   ├── model_losses.py
+│   └── phase2_losses.py
+│
+├── training/
+│   ├── train_phase_1.py
+│   ├── cross_validation.py
+│   ├── hyperp_tuning.py
+│   ├── train_final.py
+│   └── train_phase_2.py
+│
+├── evaluation/
+│   ├── metrics.py
+│   ├── calibration.py
+│   └── uncertainty.py
+│
+└── utils/
+    └── embedding_cache.py
+```
+
+Each file has one clear responsibility. Training orchestration, loss definitions, metric calculation, calibration, and uncertainty estimation are kept separate so that the same model implementation can be reused without creating duplicate model code.
+
+---
+
+# 3. Data Layer
+
+The data layer converts raw movie information into model-ready samples.
 
 ```text
 08_create_targets.py
@@ -51,33 +164,55 @@ data_loader.py
 validate_dataset.py
 ```
 
-### `08_create_targets.py`
+## `08_create_targets.py`
 
-Creates the ground-truth targets for all four prediction tasks.
+Creates the ground-truth targets used by the four supervised tasks.
 
-Responsibilities:
+### Responsibilities
 
 - Create the 19 genre multi-hot target columns.
-- Create the rating regression target.
-- Create the box-office / revenue target.
+- Create the movie-rating regression target.
+- Create the box-office target and its four class labels.
 - Create the content-rating / certification target.
-- Preserve missing target information for later task-specific masking.
+- Preserve missing-target information so individual tasks can ignore unavailable targets.
+
+The resulting task structure is:
+
+```text
+Genre
+→ 19 binary labels
+
+Rating
+→ continuous value
+
+Box Office
+→ 0 = Flop
+→ 1 = Average
+→ 2 = Hit
+→ 3 = Blockbuster
+
+Content Rating
+→ 0 = G
+→ 1 = PG
+→ 2 = PG-13
+→ 3 = R
+```
 
 ---
 
-### `09_split_dataset.py`
+## `09_split_dataset.py`
 
-Creates the movie-level development/test split.
+Creates the chronological development/test split.
 
-Responsibilities:
+### Responsibilities
 
-- Perform the chronological split.
+- Split movies chronologically.
 - Use `imdb_id` as the movie identifier.
 - Keep development and test movies separate.
-- Apply the same movie-level split to the task-specific datasets.
-- Validate that no movie appears in both splits.
+- Apply the same movie-level split to task-specific datasets.
+- Validate that no movie appears in both partitions.
 
-The current chronological rule is:
+Current split:
 
 ```text
 release_year < 2019  → Development
@@ -86,347 +221,394 @@ release_year >= 2019 → Test
 
 ---
 
-### `preprocessing.py`
+## `preprocessing.py`
 
-Handles preprocessing of **raw tabular model inputs only**.
+Handles preprocessing of raw **tabular model inputs**.
 
-Responsibilities:
+### Responsibilities
 
-- Numerical preprocessing
-- Missing-value handling
-- Categorical encoding
-- Scaling
-- Feature engineering
-- Missingness indicators
-- Cyclic date/time features
+- Numerical preprocessing.
+- Missing-value handling.
+- Categorical encoding.
+- Scaling.
+- Feature engineering.
+- Missingness indicators.
+- Cyclic date/time features.
 
-Targets are not treated as tabular model features.
+Targets are not treated as ordinary tabular input features.
 
 ---
 
-### `featurization.py`
+## `featurization.py`
 
-Applies the tabular preprocessor after the development/test split.
+Fits and applies the tabular preprocessing pipeline after the development/test split.
 
-Responsibilities:
+### Responsibilities
 
 - Fit the tabular preprocessor on development data only.
 - Transform development data.
-- Transform test data with the same fitted preprocessor.
+- Transform test data using the already-fitted development preprocessor.
 - Save processed tabular features.
-- Add `imdb_id`, `overview`, and task targets back to the processed dataset.
-- Save the fitted preprocessor.
+- Preserve `imdb_id`, overview text, and task targets.
+- Save the fitted preprocessing object.
+
+This prevents future test information from affecting feature preprocessing.
 
 ---
 
-### `custom_dataset.py`
+## `custom_dataset.py`
 
 Defines `MovieDataset`.
 
-Responsibilities:
+For each movie, it produces the tensors consumed by the model.
 
-- Convert one movie into one PyTorch-ready sample.
+```text
+Movie
+ │
+ ├── Poster
+ │     └── ViT image preprocessing
+ │
+ ├── Overview
+ │     └── BERT tokenization
+ │
+ ├── Tabular features
+ │
+ └── Targets + target masks
+```
+
+### Responsibilities
+
 - Load the corresponding poster.
-- Apply the ViT image preprocessing.
-- Retrieve/tokenize the movie overview for BERT.
+- Apply image preprocessing.
+- Tokenize the movie overview.
 - Retrieve processed tabular features.
 - Retrieve all task targets.
-- Retrieve target-availability masks.
-- Return the sample in a format that can be batched by PyTorch.
+- Retrieve task-specific target-availability masks.
+- Return a PyTorch-ready sample.
 
-It does **not** run ViT, BERT, the MLP, cross-attention, or task heads.
-
----
-
-### `data_loader.py`
-
-Creates the PyTorch `DataLoader`s.
-
-Responsibilities:
-
-- Create training/test Dataset objects.
-- Group individual `MovieDataset` samples into batches.
-- Provide batches to the training and evaluation pipelines.
+`custom_dataset.py` does **not** run ViT, BERT, the MLP, cross-attention, or task heads.
 
 ---
 
-### `validate_dataset.py`
+## `data_loader.py`
 
-Validates the complete data-to-model-input boundary.
+Creates PyTorch `DataLoader`s.
 
-Responsibilities:
+### Responsibilities
+
+- Construct development/test Dataset objects.
+- Batch `MovieDataset` samples.
+- Configure batching and worker behavior.
+- Provide batches to training and evaluation pipelines.
+
+---
+
+## `validate_dataset.py`
+
+Validates the complete boundary between data preparation and model input.
+
+### Responsibilities
 
 - Validate target structure.
 - Validate target encodings.
 - Validate feature/target separation.
-- Validate tensors, shapes, and dtypes.
+- Validate tensor shapes and dtypes.
 - Validate target masks.
 - Validate poster availability.
 - Validate DataLoader batch creation.
-- Validate that masked targets are handled correctly.
+- Validate that missing targets are masked correctly.
 
-When this passes, the **data layer is complete**.
+When this passes, the data layer is ready for model training.
 
 ---
 
-# 1. Model Components
+# 4. Model Layer
 
-These files are shared by both Phase 1 and Phase 2.
-
-```text
-vit_encoder.py
-bert_encoder.py
-tabular_encoder.py
-        ↓
-cross_attention.py
-        ↓
-task_heads.py
-        ↓
-cinefusion_model.py
-```
-
-### `vit_encoder.py`
-
-Handles the visual branch.
+The architecture is defined once and reused by both training phases.
 
 ```text
-pixel_values
-    ↓
-ViT
-    ↓
-visual embedding
+Poster ──────→ ViT Encoder ────────→ Visual Embedding
+Overview ────→ BERT Encoder ───────→ Text Embedding
+Metadata ────→ Tabular MLP ────────→ Tabular Embedding
+                                          │
+                                          ▼
+                                 Multimodal Attention
+                                          │
+                                          ▼
+                                  Fused Representation
+                                          │
+                                          ▼
+                                      Task Heads
 ```
 
-Responsibilities:
+There is only one implementation of each encoder, fusion module, task-head module, and complete CineFusion-X model.
+
+---
+
+## `vit_encoder.py`
+
+The visual encoder.
+
+```text
+Poster
+  ↓
+Image preprocessing
+  ↓
+MAE-pretrained ViT-B/16
+  ↓
+Visual feature vector
+  ↓
+Projection
+  ↓
+Visual embedding
+```
+
+Current visual backbone:
+
+```text
+vit_base_patch16_224.mae
+```
+
+### Responsibilities
 
 - Load the pretrained ViT.
 - Process poster tensors.
 - Produce visual representations.
-- Fine-tune the ViT during training.
+- Project the backbone representation into the shared embedding dimension.
+- Support selective fine-tuning of the final ViT blocks for Phase 2.
+
+### Phase 1
+
+```text
+ViT backbone  → frozen
+ViT projection → trainable
+```
+
+### Phase 2
+
+The final `N` transformer blocks can be selectively unfrozen while earlier blocks remain frozen.
 
 ---
 
-### `bert_encoder.py`
+## `bert_encoder.py`
 
-Handles the text branch.
+The textual encoder.
 
 ```text
-input_ids
-attention_mask
-        ↓
-BERT
-        ↓
-text embedding
+Overview tokens
+      ↓
+BERT-base-uncased
+      ↓
+[CLS] representation
+      ↓
+Projection
+      ↓
+Text embedding
 ```
 
-Responsibilities:
+BERT-base has a 768-dimensional hidden representation before projection.
+
+### Responsibilities
 
 - Load pretrained BERT.
 - Process tokenized movie overviews.
-- Produce text representations.
-- Fine-tune BERT during training.
+- Produce the `[CLS]` representation.
+- Project it into the shared embedding dimension.
+- Support selective fine-tuning of the final BERT layers for Phase 2.
+
+### Phase 1
+
+```text
+BERT backbone   → frozen
+BERT projection → trainable
+```
+
+### Phase 2
+
+The final `N` BERT transformer layers can be selectively unfrozen while earlier layers remain frozen.
 
 ---
 
-### `tabular_encoder.py`
+## `tabular_encoder.py`
 
-Handles the structured metadata branch.
+Handles structured movie metadata.
 
 ```text
-processed features
-        ↓
-MLP
-        ↓
-tabular embedding
+Processed tabular features
+          ↓
+         MLP
+          ↓
+   Tabular embedding
 ```
-
-Responsibilities:
-
-- Receive processed tabular features.
-- Map them into the model's learned representation space.
 
 The MLP is trained from scratch.
 
 ---
 
-### `cross_attention.py`
+## `cross_attention.py`
 
-Handles multimodal fusion.
+Performs multimodal fusion.
 
 ```text
 Visual Embedding
-Text Embedding
+Text Embedding ───→ Multimodal Attention ───→ Fused Representation
 Tabular Embedding
-        ↓
-Cross-Attention
-        ↓
-Fused Representation
 ```
 
-Responsibilities:
+### Responsibilities
 
 - Allow information from different modalities to interact.
-- Produce the fused multimodal representation.
+- Combine visual, textual, and tabular information.
+- Produce the fused representation used by the task heads.
 
-The cross-attention module is trainable.
+The fusion module is trainable.
 
 ---
 
-### `task_heads.py`
+## `task_heads.py`
 
-Defines the four prediction heads.
+Defines the four supervised prediction heads.
 
 ```text
-Fused Representation
-        │
-        ├── Genre Head
-        ├── Rating Head
-        ├── Revenue Head
-        └── Certification Head
+                  Fused Representation
+                         │
+        ┌────────────────┼─────────────────┐
+        │                │                 │
+        ▼                ▼                 ▼
+     Genre            Rating           Box Office
+   19 logits        regression       4-class logits
+                         │
+                         ▼
+                 Content Rating
+                   4-class logits
 ```
 
-Responsibilities:
+### Responsibilities
 
-- Convert the fused representation into task-specific predictions.
-- Produce the appropriate output dimensionality for each task.
+- Convert the fused representation into task-specific outputs.
+- Produce the correct output dimensionality for each task.
 
-It does **not** calculate losses.
-
----
-
-### `cinefusion_model.py`
-
-Defines the complete CineFusion-X model.
-
-Responsibilities:
-
-- Connect ViT, BERT, and tabular MLP.
-- Run multimodal fusion through cross-attention.
-- Pass the fused representation to the four task heads.
-- Return the model predictions and/or representations required by the training phase.
-
-This is the main model-level forward-pass module.
+It does not calculate losses or evaluation metrics.
 
 ---
 
-# 2. Phase 1 — Task-Only Training
+## `cinefusion_model.py`
 
-## Objective
+Connects the complete architecture.
 
-Phase 1 first teaches the entire multimodal model to solve the four supervised tasks.
+### Forward path
 
 ```text
-Batch
-  ↓
-ViT + BERT + MLP
-  ↓
-Cross-Attention
-  ↓
-Fused Representation
-  ↓
-Task Heads
-  ↓
-Four Predictions
-  ↓
-Task Losses
-  ↓
-Backpropagation
-  ↓
-Parameter Update
+pixel_values
+     ↓
+ViT
+     ↓
+visual embedding
+
+input_ids + attention_mask
+     ↓
+BERT
+     ↓
+text embedding
+
+tabular features
+     ↓
+MLP
+     ↓
+tabular embedding
+
+visual + text + tabular
+     ↓
+multimodal attention
+     ↓
+fused representation
+     ↓
+task heads
+     ↓
+four task outputs
 ```
 
-The Phase-1 objective is:
+### Responsibilities
 
-```text
-L_phase1 = L_task
-```
+- Instantiate the three modality encoders.
+- Instantiate multimodal attention.
+- Instantiate the task heads.
+- Execute the complete forward pass.
+- Return modality embeddings, fused representation, and task predictions required by training and evaluation.
+
+Phase 2 reuses this same model rather than creating a second architecture.
 
 ---
 
-### `model_losses.py`
+## `contrastive_loss.py`
 
-Handles the supervised multitask objective.
+Contains the modality-alignment objective used in Phase 2.
 
-Responsibilities:
+### Responsibilities
 
-- Calculate genre loss.
-- Calculate rating loss.
-- Calculate revenue / box-office loss.
-- Calculate certification / content-rating loss.
-- Apply task-specific target masks.
-- Combine the per-task losses into the total supervised loss.
+- Receive modality embeddings.
+- Construct positive relationships between modalities belonging to the same movie.
+- Use other movies as negatives according to the chosen contrastive formulation.
+- Calculate the contrastive loss.
 
 Conceptually:
+
+```text
+Same movie
+   ├── Visual ↔ Text
+   ├── Visual ↔ Tabular
+   └── Text   ↔ Tabular
+           ↓
+       Positives
+
+Different movies
+           ↓
+        Negatives
+```
+
+---
+
+# 5. Loss Layer
+
+## `model_losses.py`
+
+Contains the supervised multitask loss used in both Phase 1 and Phase 2.
 
 ```text
 L_task =
     λ_genre L_genre
   + λ_rating L_rating
-  + λ_revenue L_revenue
-  + λ_cert L_cert
+  + λ_box_office L_box_office
+  + λ_content_rating L_content_rating
 ```
 
-A missing target is ignored for its specific task instead of removing the entire movie from the batch.
+### Task losses
+
+```text
+Genre
+→ BCEWithLogitsLoss
+
+Rating
+→ SmoothL1Loss
+
+Box Office
+→ CrossEntropyLoss
+
+Content Rating
+→ CrossEntropyLoss
+```
+
+Target masks are applied independently to each task. A missing target for one task does not remove that movie from the other task losses.
+
+Content-rating class weights can be supplied to the classification loss to address class imbalance.
 
 ---
 
-### `train_phase_1.py`
+## `phase2_losses.py`
 
-train_phase_1.py is responsible for executing one actual Phase 1 training run on one train/validation split. It receives the DataLoaders and hyperparameters, creates the CineFusionModel, MultiTaskLoss, and AdamW optimizer, then iterates through the requested number of epochs. For every epoch it trains batch-by-batch using the multitask masked loss, then switches to evaluation mode and processes the validation set. The validation outputs from all batches are collected and concatenated so that Genre, Rating, Box Office, and Content Rating metrics are calculated on the complete validation fold. These task metrics are then combined into the composite score, and the epoch with the highest composite score becomes the best epoch. When a checkpoint path is supplied, the model and optimizer states plus relevant training metadata are saved through torch.save().
+Contains Phase-2-specific loss composition when additional Phase-2 objective handling is needed.
 
-From the MLflow perspective, this file is responsible for training-related metrics and the checkpoint artifact, not for defining the overall Optuna search. In CV mode (return_full_metrics=False), it keeps the run lightweight and logs the best validation loss, best epoch, and best composite score once for that fold. In detailed best-configuration mode (return_full_metrics=True), it additionally logs epoch-by-epoch train loss, validation loss, and composite score, followed by overall task metrics and all per-genre/per-class metrics. If a checkpoint path is provided, the saved checkpoint is also registered as an MLflow artifact. The function finally returns only the best composite score in CV mode, while returning the complete best_metrics dictionary in detailed mode.
-
-### `cross_validation.py`
-
-cross_validation.py is responsible for evaluating one hyperparameter configuration across multiple time-ordered folds. It creates a TimeSeriesSplit, generates the training and validation indices for each fold, builds Subset objects and their DataLoaders, and then calls train_phase_1() once for each fold with return_full_metrics=False. Each fold therefore trains its own model and returns only its best composite score to the cross-validation layer. The five fold scores are collected and then aggregated into the mean and standard deviation of the composite score. These aggregated values represent how well that one configuration performs across the different time-ordered validation splits, and the mean composite score is the value that the hyperparameter-search layer uses for comparison. Test data is never involved in this process.
-
-MLflow here is used at the fold level and configuration/CV-summary level. Each fold is created as a nested MLflow run, where the fold number, number of splits, seed, batch size, device, and the hyperparameter configuration being evaluated are recorded. The actual best-fold training metrics such as best_val_loss, best_epoch, and best_composite_score are produced by train_phase_1(). After all five folds finish, cross_validation.py aggregates their composite scores and logs the configuration-level mean_cv_composite_score and std_cv_composite_score. Thus, this file provides the MLflow hierarchy that lets you inspect individual folds while still having a single aggregated result for the configuration.
-
-### `hyperp_tuning.py`
-
-hyperp_tuning.py is the top-level Phase 1 search and orchestration layer. It creates the Optuna study, defines the search space through trial.suggest_float, trial.suggest_int, and trial.suggest_categorical, and repeatedly calls the cross-validation pipeline for each trial. Each trial therefore represents one candidate hyperparameter configuration, and its objective is the mean composite score returned by cross-validation. Optuna compares these trial results and selects the configuration with the highest mean CV composite score. Once the winning configuration is identified, this file saves phase1_best_config.json, creates the final Phase 1 train/validation split for the detailed run, calls train_phase_1() again with return_full_metrics=True, and saves the returned complete best_metrics as phase1_best_metrics.json. It also preserves the overall Optuna/CV search history in phase1_cv_results.json.
-
-MLflow in hyperp_tuning.py operates at the highest level, representing the Optuna trial and the final selected configuration. A parent trial run records the candidate hyperparameters, while the nested fold runs created by cross_validation.py contain the detailed fold-level information. The trial ultimately receives the aggregated mean CV composite score that determines which configuration wins. After Optuna chooses the winner, a separate nested phase1_best_configuration run records the selected configuration and the detailed training history and metrics generated by train_phase_1(). The final JSON artifacts are saved by the filesystem side of this orchestration, while MLflow tracks the experiment history and the relevant artifacts. The checkpoint itself is owned by train_phase_1.py; hyperp_tuning.py should not upload that same checkpoint a second time.
-
-# 4. Phase 2 — Multimodal Alignment + Joint Optimization
-
-## Objective
-
-Phase 2 starts from the **best Phase-1 checkpoint** and the configuration selected through development-set cross-validation and hyperparameter tuning.
-
-Phase 2 adds an explicit multimodal contrastive objective while continuing to optimize the supervised task objective.
-
-```text
-Best Phase-1 Checkpoint
-          ↓
-Current Batch
-          ↓
-ViT + BERT + MLP
-          ↓
-Modality Embeddings
-          ↓
-Contrastive Alignment
-          +
-Cross-Attention Fusion
-          ↓
-Fused Representation
-          ↓
-Task Heads
-          ↓
-Task Predictions
-          ↓
-Task Losses
-          +
-Contrastive Loss
-          ↓
-Total Phase-2 Loss
-          ↓
-Backpropagation
-          ↓
-Parameter Update
-```
-
-The Phase-2 objective is:
+The core Phase-2 objective remains:
 
 ```text
 L_phase2 =
@@ -434,68 +616,255 @@ L_phase2 =
   + λ_contrastive L_contrastive
 ```
 
-The same model architecture is reused from Phase 1.
+`model_losses.py` remains the source of truth for the four supervised task losses.
 
-There is **no second copy of ViT, BERT, MLP, Cross-Attention, or the Task Heads**.
+`contrastive_loss.py` remains the implementation of the contrastive objective.
+
+`phase2_losses.py` composes them where Phase-2-specific handling is required; it does not duplicate the four task-loss implementations.
 
 ---
 
-### `contrastive_loss.py`
+# 6. Phase 1 — Task-Only Training
 
-Contains only the contrastive learning objective.
+## Objective
 
-Responsibilities:
-
-- Receive modality embeddings.
-- Construct positive same-movie relationships.
-- Use other movies as negatives according to the contrastive formulation.
-- Calculate the contrastive loss.
-
-Conceptually:
+Phase 1 teaches the multimodal model to solve the four supervised tasks before explicit representation alignment is introduced.
 
 ```text
-Same movie
-   ↓
-Visual ↔ Text ↔ Tabular
-   ↓
-positive relationships
-
-Different movies
-   ↓
-negative relationships
+Batch
+  ↓
+ViT + BERT + Tabular MLP
+  ↓
+Visual / Text / Tabular Embeddings
+  ↓
+Multimodal Attention
+  ↓
+Fused Representation
+  ↓
+Task Heads
+  ↓
+Four Predictions
+  ↓
+Masked Task Losses
+  ↓
+Backpropagation
+  ↓
+Parameter Update
 ```
 
-The goal is to improve alignment between the representations of different modalities belonging to the same movie.
+```text
+L_phase1 = L_task
+```
+
+### Trainable components in Phase 1
+
+```text
+ViT backbone        → frozen
+BERT backbone       → frozen
+ViT projection      → trainable
+BERT projection     → trainable
+Tabular MLP         → trainable
+Cross-Attention     → trainable
+Task Heads          → trainable
+```
 
 ---
 
-### `train_phase_2.py`
+## `train_phase_1.py`
 
-Runs Phase-2 training.
+The single-configuration training engine used by cross-validation.
 
-Responsibilities:
+### Responsibilities
 
-- Load the best Phase-1 checkpoint.
-- Reuse the existing CineFusion-X model.
-- Generate modality embeddings.
-- Calculate the contrastive loss.
-- Run cross-attention fusion.
-- Generate four task predictions.
-- Calculate the existing supervised task losses.
-- Combine the objectives:
+- Create the CineFusion-X model from the supplied configuration.
+- Create `MultiTaskLoss`.
+- Create the optimizer and validation-driven scheduler.
+- Train one configuration on one development train/validation split.
+- Evaluate the validation split after every epoch.
+- Calculate task metrics on the complete validation fold.
+- Calculate the composite development score.
+- Track the best validation epoch.
+- Optionally save the best checkpoint when a checkpoint path is supplied.
+- Return the best composite score or the full best-metrics object depending on the caller.
+
+This file does **not** run Optuna and does **not** perform final test evaluation.
+
+---
+
+# 7. Cross-Validation
+
+## `cross_validation.py`
+
+Performs chronological cross-validation over the development set only.
 
 ```text
-L_total =
+Development Data
+      ↓
+TimeSeriesSplit
+      ↓
+Fold 1 ──┐
+Fold 2 ──┼──→ train_phase_1.py
+Fold 3 ──┘
+      ↓
+Best score from each fold
+      ↓
+Mean + Standard Deviation
+```
+
+### Responsibilities
+
+- Create time-ordered development folds.
+- Create train/validation `Subset`s and DataLoaders.
+- Call `train_phase_1.py` once per fold.
+- Collect each fold's best composite score.
+- Calculate mean and standard deviation.
+- Return the aggregated result to the hyperparameter-search layer.
+
+### It does not
+
+- access the actual test set
+- perform final training
+- perform final test evaluation
+- learn test-set thresholds
+- calibrate on the test set
+- create the final production checkpoint
+
+---
+
+# 8. Hyperparameter Tuning
+
+## `hyperp_tuning.py`
+
+Top-level Phase-1 model-selection orchestrator.
+
+```text
+Optuna Trial
+     ↓
+Candidate Configuration
+     ↓
+cross_validation.py
+     ↓
+TimeSeriesSplit
+     ↓
+train_phase_1.py
+     ↓
+Fold Scores
+     ↓
+Mean CV Composite Score
+     ↓
+Optuna
+     ↓
+Best Configuration
+```
+
+### Responsibilities
+
+- Create the Optuna study.
+- Define the Phase-1 search space.
+- Run trials.
+- Call cross-validation for each candidate configuration.
+- Optimize mean development CV composite score.
+- Record fold variability.
+- Save the selected configuration and CV history.
+
+Typical search parameters can include learning rate, training budget, tabular hidden dimension, embedding dimension, task weights, weight decay, and relevant regularization settings.
+
+### Important distinction
+
+```text
+Best configuration
+≠
+Best learned weights
+```
+
+Optuna selects the configuration. Final training produces the final learned weights.
+
+Typical outputs:
+
+```text
+phase1_best_config.json
+phase1_cv_results.json
+```
+
+---
+
+# 9. Final Training
+
+## `train_final.py`
+
+Final-training orchestrator used after development-set model selection.
+
+The final model is **not** trained only on the last CV fold.
+
+```text
+Development Data
+      ↓
+Optuna + Cross-Validation
+      ↓
+Best Configuration
+      ↓
+ALL Development Data
+      ↓
+Final Training
+      ↓
+Final Checkpoint
+```
+
+### Responsibilities
+
+- Load the selected configuration.
+- Build the final training Dataset/DataLoader over all development data.
+- Train the selected model using a fixed final training budget derived from development-stage results.
+- Save the final checkpoint.
+- Keep the actual test set completely untouched until final evaluation.
+
+Because the final run uses all development data, it should not depend on test-set performance for early stopping or checkpoint selection.
+
+`train_final.py` is an orchestration layer rather than a second copy of the full training loop.
+
+---
+
+# 10. Phase 2 — Multimodal Alignment + Joint Optimization
+
+## Objective
+
+Phase 2 starts from the best Phase-1 model and adds an explicit multimodal alignment objective.
+
+```text
+Best Phase-1 Checkpoint
+        ↓
+Current Batch
+        ↓
+ViT + BERT + Tabular MLP
+        ↓
+Modality Embeddings
+        ├──────────────→ Contrastive Loss
+        │
+        ↓
+Multimodal Attention
+        ↓
+Fused Representation
+        ↓
+Task Heads
+        ↓
+Supervised Task Loss
+        │
+        └──────────────┐
+                       ▼
+               Total Phase-2 Loss
+                       ↓
+                 Backpropagation
+                       ↓
+                 Parameter Update
+```
+
+```text
+L_phase2 =
     L_task
   + λ_contrastive L_contrastive
 ```
 
-- Backpropagate through all trainable components.
-- Update the model parameters.
-- Track development performance.
-- Save the best final checkpoint.
-
-Phase 2 therefore performs **joint optimization** of:
+Phase 2 optimizes:
 
 ```text
 Supervised Task Learning
@@ -505,268 +874,683 @@ Multimodal Representation Alignment
 
 ---
 
-### Phase-2 Checkpoint
+## Selective backbone fine-tuning
 
-The best Phase-2 checkpoint becomes the **best final checkpoint**.
-
-It contains the jointly optimized parameters of:
+Phase 2 can selectively fine-tune only the final transformer blocks/layers:
 
 ```text
-ViT
-BERT
-Tabular MLP
-Cross-Attention
-Task Heads
+ViT:
+    frozen earlier blocks
+            +
+    trainable final N blocks
+
+BERT:
+    frozen earlier layers
+            +
+    trainable final N layers
 ```
 
-The model has now been trained using both:
+The number of trainable blocks/layers is a Phase-2 configuration parameter and can be evaluated through development-only experiments/ablations.
+
+---
+
+## `train_phase_2.py`
+
+Phase-2 training engine.
+
+### Responsibilities
+
+- Load the best Phase-1 checkpoint.
+- Configure selective ViT/BERT fine-tuning.
+- Reuse the existing tabular encoder.
+- Generate modality embeddings.
+- Calculate the contrastive loss.
+- Run multimodal fusion.
+- Produce the four task predictions.
+- Calculate the existing supervised task losses.
+- Combine supervised and contrastive losses.
+- Train the jointly optimized model.
+- Track development validation performance when running Phase-2 experiments.
+- Produce the Phase-2 final checkpoint after the Phase-2 configuration is selected.
+
+Phase 2 does not create a second copy of the model architecture.
+
+---
+
+# 11. Embedding Caching
+
+## `embedding_cache.py`
+
+Optional utility for avoiding repeated computation through frozen backbone sections.
+
+### Phase 1
+
+Because the ViT and BERT backbones are frozen, their backbone outputs can be cached before the trainable projection layers.
 
 ```text
-Task objective
-+
-Contrastive alignment objective
+Poster
+  ↓
+Frozen ViT backbone
+  ↓
+Cached backbone representation
+  ↓
+Trainable projection
+  ↓
+Visual embedding
+```
+
+```text
+Overview
+  ↓
+Frozen BERT backbone
+  ↓
+Cached 768-d representation
+  ↓
+Trainable projection
+  ↓
+Text embedding
+```
+
+The projected 256-dimensional output should not be cached while the projection remains trainable.
+
+### Phase 2
+
+When only the final `N` transformer layers/blocks are trainable, the frozen prefix can be cached:
+
+```text
+Input
+  ↓
+Frozen prefix
+  ↓
+Cached intermediate representation
+  ↓
+Trainable final N layers/blocks
+  ↓
+Projection
+```
+
+The exact cache boundary must follow the real backbone forward path.
+
+`torch.no_grad()` is not the same as caching:
+
+```text
+torch.no_grad()
+→ avoids autograd graph construction
+
+embedding_cache.py
+→ stores reusable representations
 ```
 
 ---
 
-# 5. Final Evaluation
+# 12. Metrics
+
+## `metrics.py`
+
+`metrics.py` is the centralized evaluation utility.
+
+Its responsibility is:
+
+> Measure model performance.
+
+It does not learn thresholds or calibration parameters.
+
+---
+
+## Genre metrics
+
+Genre is a 19-label multilabel problem.
+
+The model produces 19 sigmoid probabilities:
+
+```text
+[N, 19]
+```
+
+Discrete predictions require thresholds:
+
+```text
+probability >= threshold
+        ↓
+prediction = 1
+```
+
+Phase 1 uses:
+
+```text
+threshold = 0.5
+```
+
+Phase 2 can use thresholds learned by `calibration.py`.
+
+Reported metrics can include:
+
+- macro F1
+- micro F1
+- macro precision
+- macro recall
+- ROC-AUC
+- per-genre F1
+- per-genre precision
+- per-genre recall
+- per-genre ROC-AUC
+
+---
+
+## ROC-AUC
+
+ROC-AUC is an evaluation metric and does **not** require one operating threshold.
+
+Therefore:
+
+```text
+calibration.py
+→ learns thresholds
+
+metrics.py
+→ calculates ROC-AUC and threshold-based metrics
+```
+
+For the 4-class classification tasks, multiclass ROC-AUC can be calculated from the full probability matrix using a one-vs-rest formulation.
+
+---
+
+## Box-office metrics
+
+Box office is a 4-class classification task:
+
+```text
+0 = Flop
+1 = Average
+2 = Hit
+3 = Blockbuster
+```
+
+Prediction uses the highest class probability:
+
+```text
+predicted_class = argmax(class_probabilities)
+```
+
+Metrics can include macro/weighted F1, accuracy, balanced accuracy, macro precision/recall, multiclass ROC-AUC, per-class metrics, and a confusion matrix.
+
+---
+
+## Content-rating metrics
+
+Content rating is a 4-class classification task:
+
+```text
+0 = G
+1 = PG
+2 = PG-13
+3 = R
+```
+
+Prediction uses `argmax` over the four class probabilities.
+
+Metrics can include macro/weighted F1, accuracy, balanced accuracy, macro precision/recall, multiclass ROC-AUC, per-class metrics, and a confusion matrix.
+
+---
+
+## Rating metrics
+
+Rating is regression.
+
+Metrics:
+
+- MAE
+- RMSE
+
+A normalized rating score is derived from MAE for the composite development score.
+
+---
+
+## Composite development score
+
+The existing development-stage model-selection score is:
+
+```text
+rating_score =
+max(
+    0,
+    1 - rating_mae / rating_max_error
+)
+
+composite_score =
+(
+    genre_macro_f1
+    + rating_score
+    + box_office_macro_f1
+    + content_rating_macro_f1
+) / 4
+```
+
+This composite score is the model-selection objective used by the current Phase-1 CV/Optuna pipeline.
+
+ROC-AUC is an additional evaluation metric; it does not automatically replace the existing composite objective.
+
+---
+
+# 13. Calibration
+
+## `calibration.py`
+
+`calibration.py` handles post-training calibration and decision-rule tuning using development calibration data.
+
+It contains two main jobs:
+
+```text
+calibration.py
+├── Temperature Scaling
+└── Threshold Finding
+```
+
+---
+
+## Temperature scaling
+
+Temperature scaling adjusts the confidence of classification outputs.
+
+Conceptually:
+
+```text
+Raw model logits
+      ↓
+Temperature scaling
+      ↓
+Calibrated probabilities
+```
+
+The temperature parameter is learned using a calibration/validation portion of the development data.
+
+It is locked before test evaluation.
+
+---
+
+## Threshold finding
+
+Threshold finding is mainly relevant to the 19-label genre task.
+
+The calibration data contains:
+
+```text
+Predicted probabilities
++
+Ground-truth genre labels
+```
+
+The calibration procedure searches for the chosen operating threshold rule and saves the resulting thresholds.
+
+A per-genre threshold representation is supported conceptually:
+
+```text
+genre_thresholds
+{
+    genre_0: ...,
+    genre_1: ...,
+    ...
+    genre_18: ...
+}
+```
+
+The division of responsibility is strict:
+
+```text
+calibration.py
+    ↓
+LEARN thresholds
+
+metrics.py
+    ↓
+USE thresholds
+and calculate metrics
+```
+
+Threshold finding is never performed on the 2019+ test labels.
+
+---
+
+# 14. Uncertainty Estimation
+
+## `uncertainty.py`
+
+Provides post-training uncertainty estimation using Monte Carlo Dropout.
+
+Conceptually:
+
+```text
+Trained model
+     ↓
+Enable dropout during inference
+     ↓
+Forward pass 1
+Forward pass 2
+Forward pass 3
+...
+Forward pass K
+     ↓
+Aggregate predictions
+     ↓
+Mean + uncertainty estimate
+```
+
+This is an evaluation/inference utility, not another training loss.
+
+The implementation must explicitly control which dropout modules are active during MC inference.
+
+---
+
+# 15. Final Evaluation
 
 ## `evaluate.py`
 
-The final evaluation happens only after Phase 2 is complete.
+`evaluate.py` is the final inference/evaluation orchestrator.
+
+### Responsibilities
+
+- Load the final checkpoint to be evaluated.
+- Load locked calibration parameters.
+- Run inference on the untouched test set.
+- Apply temperature scaling where configured.
+- Apply locked genre thresholds.
+- Collect predictions and targets.
+- Calculate final metrics through `metrics.py`.
+- Optionally calculate MC-Dropout uncertainty through `uncertainty.py`.
+- Save final evaluation results.
+
+The final evaluation order is:
 
 ```text
-Best Final Checkpoint
-        ↓
-evaluate.py
-        ↓
-Untouched Test Data
-        ↓
-Forward Pass
-        ↓
-Four Predictions
-        ↓
+Final model
+    ↓
+Development calibration data
+    ↓
+calibration.py
+    ├── temperature
+    └── thresholds
+    ↓
+LOCK calibration parameters
+    ↓
+2019+ test set
+    ↓
+Forward pass
+    ↓
+Apply calibration
+    ↓
+Optional uncertainty
+    ↓
 metrics.py
-        ↓
-Final Test Metrics
-        ↓
-Report Results
+    ↓
+Final reported metrics
 ```
-
-Responsibilities:
-
-- Load the best final checkpoint.
-- Run the final model on the untouched test set.
-- Generate predictions for all four tasks.
-- Use `metrics.py` to calculate the final reported metrics.
-- Report the final results.
-
-The test set is **not** used for:
-
-- training
-- cross-validation
-- hyperparameter tuning
-- Phase-2 checkpoint selection
-
-It is used only for the final evaluation.
 
 ---
 
-# Complete File Pipeline
+# 16. Phase 1 vs Phase 2 Comparison
 
-## Data Layer
+Both phases must be evaluated under the same final test protocol.
 
 ```text
+                    DEVELOPMENT
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+       PHASE 1                       PHASE 2
+          │                             │
+   model selection                config/ablation
+          │                             │
+   final train on                final train on
+   ALL development               ALL development
+          │                             │
+          ▼                             ▼
+   Phase-1 final                  Phase-2 final
+      model                          model
+          │                             │
+          └──────────────┬──────────────┘
+                         ▼
+                SAME 2019+ TEST SET
+                         │
+                         ▼
+                SAME CALIBRATION RULES
+                         │
+                         ▼
+                SAME METRIC DEFINITIONS
+                         │
+                         ▼
+                 Comparable Results
+```
+
+Neither model gets an advantage from using a different test set, different metric definitions, or test-specific threshold tuning.
+
+---
+
+# 17. Complete File Responsibility Map
+
+| File | Primary responsibility | Test data used? |
+|---|---|---:|
+| `08_create_targets.py` | Create supervised targets | No |
+| `09_split_dataset.py` | Chronological development/test split | Only to define the partition |
+| `preprocessing.py` | Raw tabular preprocessing logic | No test fitting |
+| `featurization.py` | Fit development preprocessing and transform partitions | No test fitting |
+| `custom_dataset.py` | Build PyTorch-ready movie samples | No |
+| `data_loader.py` | Create DataLoaders | No |
+| `validate_dataset.py` | Validate the data/model-input boundary | No |
+| `vit_encoder.py` | Visual encoding + selective fine-tuning | No |
+| `bert_encoder.py` | Text encoding + selective fine-tuning | No |
+| `tabular_encoder.py` | Tabular MLP | No |
+| `cross_attention.py` | Multimodal fusion | No |
+| `task_heads.py` | Four prediction heads | No |
+| `cinefusion_model.py` | Complete forward-pass architecture | No |
+| `contrastive_loss.py` | Contrastive alignment loss | No |
+| `model_losses.py` | Four supervised task losses | No |
+| `phase2_losses.py` | Phase-2 loss composition | No |
+| `train_phase_1.py` | Train one Phase-1 config on one train/validation split | No |
+| `cross_validation.py` | TimeSeriesSplit over development data | No |
+| `hyperp_tuning.py` | Optuna search and best-config selection | No |
+| `train_final.py` | Final training on all development data | No |
+| `train_phase_2.py` | Phase-2 alignment + joint optimization | No |
+| `embedding_cache.py` | Cache frozen backbone/prefix representations | No |
+| `calibration.py` | Temperature scaling + threshold finding | Never for test tuning |
+| `uncertainty.py` | MC-Dropout uncertainty estimation | Optional at final evaluation |
+| `metrics.py` | Centralized metric calculation | Yes, only for final evaluation |
+| `evaluate.py` | Final inference/evaluation orchestration | Yes, only at the end |
+
+---
+
+# 18. Artifact Flow
+
+## Development/model-selection artifacts
+
+```text
+phase1_best_config.json
+    ↓
+selected hyperparameter recipe
+
+phase1_cv_results.json
+    ↓
+Optuna trial + fold history
+```
+
+## Model artifacts
+
+```text
+phase1_final.pt
+    ↓
+Final Phase-1 learned weights
+
+phase2_final.pt
+    ↓
+Final Phase-2 learned weights
+```
+
+## Calibration artifacts
+
+```text
+phase2_calibration.json
+    ↓
+Temperature + learned genre thresholds
+```
+
+## Evaluation artifacts
+
+```text
+test_metrics.json
+    ↓
+Final test metrics
+
+uncertainty outputs
+    ↓
+Optional MC-Dropout uncertainty results
+```
+
+Exact artifact filenames can be adjusted to the repository's path constants without changing their responsibilities.
+
+---
+
+# 19. Final End-to-End Pipeline
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         DATA PREPARATION                      │
+└──────────────────────────────────────────────────────────────┘
+
+Raw Movie Data
+      ↓
 08_create_targets.py
-        ↓
+      ↓
+Task Targets + Masks
+      ↓
 09_split_dataset.py
-        ↓
-preprocessing.py
-        ↓
-featurization.py
-        ↓
-custom_dataset.py
-        ↓
-data_loader.py
-        ↓
-validate_dataset.py
-        ↓
-DATA LAYER COMPLETE
-```
+      ↓
+Development (<2019) ────────────────────── Test (>=2019)
+      │                                           │
+      ▼                                           │
+preprocessing.py                                 │
+      ↓                                           │
+featurization.py                                 │
+      ↓                                           │
+custom_dataset.py                               │
+      ↓                                           │
+ data_loader.py                                  │
+      ↓                                           │
+validate_dataset.py                             │
+      │                                           │
+      ▼                                           │
+┌──────────────────────────────────────────────────────────────┐
+│                   SHARED MODEL ARCHITECTURE                   │
+└──────────────────────────────────────────────────────────────┘
 
-## Shared Model Layer
+Poster → ViT → Visual Embedding
+Overview → BERT → Text Embedding
+Metadata → MLP → Tabular Embedding
+                         │
+                         ▼
+                 Cross-Attention
+                         │
+                         ▼
+                  Fused Representation
+                         │
+                         ▼
+                     Task Heads
+                         │
+            ┌────────────┼────────────┐
+            ▼            ▼            ▼
+          Genre        Rating     Box Office
+                           │
+                           ▼
+                    Content Rating
 
-These files are created once and reused in both training phases.
+      │
+      ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  PHASE 1: TASK-ONLY TRAINING                │
+└──────────────────────────────────────────────────────────────┘
 
-```text
-vit_encoder.py
-bert_encoder.py
-tabular_encoder.py
-        ↓
-cross_attention.py
-        ↓
-task_heads.py
-        ↓
-cinefusion_model.py
-```
-
-## Phase 1 — Task-Only Training
-
-```text
 model_losses.py
-        ↓
+      ↓
 train_phase_1.py
-        ↓
-Best Phase-1 Checkpoint
-```
-
-Phase 1 uses the shared model components above and the existing supervised
-loss implementation. No second copy of the model is created.
-
-## Phase 2 Model Selection
-
-After Phase 1 produces a working/best checkpoint, Phase-2 hyperparameters
-are selected using only the development data.
-
-```text
-Best Phase-1 Checkpoint
-        ↓
-hyperparameter_tuning.py
-        ↕
+      ↓
 cross_validation.py
-        ↓
-metrics.py
-        ↓
-Best Phase-2 Configuration
-```
+      ↓
+TimeSeriesSplit
+      ↓
+hyperp_tuning.py
+      ↓
+Optuna
+      ↓
+Best Phase-1 Configuration
+      ↓
+train_final.py
+      ↓
+ALL Development Data
+      ↓
+Final Phase-1 Checkpoint
 
-`metrics.py` is a shared utility. It is used by cross-validation/model
-selection and later by final evaluation; it is not a separate training
-stage.
+      │
+      ▼
+┌──────────────────────────────────────────────────────────────┐
+│          PHASE 2: ALIGNMENT + JOINT OPTIMIZATION            │
+└──────────────────────────────────────────────────────────────┘
 
-## Phase 2 — Multimodal Alignment + Joint Optimization
-
-```text
 Best Phase-1 Checkpoint
-        ↓
+      ↓
 train_phase_2.py
-        │
-        ├── reuses vit_encoder.py
-        ├── reuses bert_encoder.py
-        ├── reuses tabular_encoder.py
-        ├── reuses cross_attention.py
-        ├── reuses task_heads.py
-        ├── reuses cinefusion_model.py
-        └── reuses model_losses.py
-                  +
-            contrastive_loss.py
-        ↓
-Best Final Checkpoint
-```
+      ├── existing model_losses.py
+      └── contrastive_loss.py
+      ↓
+Selective backbone fine-tuning
+      ↓
+Final Phase-2 Checkpoint
 
-Phase 2 does not duplicate the Phase-1 architecture. It continues from the
-Phase-1 checkpoint and adds the contrastive objective to the existing
-supervised objective.
+      │
+      ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  CALIBRATION / UNCERTAINTY                   │
+└──────────────────────────────────────────────────────────────┘
 
-## Final Evaluation
+Development Calibration Data
+      ↓
+calibration.py
+      ├── Temperature Scaling
+      └── Genre Threshold Finding
+      ↓
+LOCK calibration parameters
 
-```text
-Best Final Checkpoint
-        ↓
+Final Model
+      ↓
+uncertainty.py
+      ↓
+Optional MC-Dropout uncertainty
+
+      │
+      ▼
+┌──────────────────────────────────────────────────────────────┐
+│                     FINAL TEST EVALUATION                    │
+└──────────────────────────────────────────────────────────────┘
+
+Untouched 2019+ Test Data
+      ↓
 evaluate.py
-        ↓
+      ↓
+Apply locked calibration
+      ↓
 metrics.py
-        ↓
-Untouched Test Set
-        ↓
-Final Metrics
+      ├── Genre F1 / Precision / Recall / ROC-AUC
+      ├── Rating MAE / RMSE
+      ├── Box-Office classification metrics / ROC-AUC
+      └── Content-Rating classification metrics / ROC-AUC
+      ↓
+Final Phase-1 vs Phase-2 comparison
 ```
 
-# Final End-to-End Flow
+---
 
-```text
-DATA
-  ↓
-08_create_targets.py
-  ↓
-09_split_dataset.py
-  ↓
-preprocessing.py
-  ↓
-featurization.py
-  ↓
-custom_dataset.py
-  ↓
-data_loader.py
-  ↓
-validate_dataset.py
-  ↓
-DATA LAYER COMPLETE
-  ↓
-────────────────────────────────────────
-SHARED MODEL
-────────────────────────────────────────
-vit_encoder.py
-bert_encoder.py
-tabular_encoder.py
-  ↓
-cross_attention.py
-  ↓
-task_heads.py
-  ↓
-cinefusion_model.py
-  ↓
-────────────────────────────────────────
-PHASE 1 — TASK-ONLY TRAINING
-────────────────────────────────────────
-model_losses.py
-  ↓
-train_phase_1.py
-  ↓
-Best Phase-1 Checkpoint
-  ↓
-────────────────────────────────────────
-PHASE 2 MODEL SELECTION
-────────────────────────────────────────
-hyperparameter_tuning.py
-        ↕
-cross_validation.py
-        ↓
-metrics.py
-        ↓
-Best Phase-2 Configuration
-  ↓
-────────────────────────────────────────
-PHASE 2 — MULTIMODAL ALIGNMENT
-       + JOINT OPTIMIZATION
-────────────────────────────────────────
-Best Phase-1 Checkpoint
-  ↓
-contrastive_loss.py
-        +
-existing model_losses.py
-  ↓
-train_phase_2.py
-  ↓
-Best Final Checkpoint
-  ↓
-────────────────────────────────────────
-FINAL EVALUATION
-────────────────────────────────────────
-evaluate.py
-  ↓
-metrics.py
-  ↓
-UNTOUCHED TEST SET
-  ↓
-FINAL METRICS
-```
+# 20. Design Principles
 
-# Design Principles
+## Reuse the same model
 
-### Reuse the same model
-
-Phase 2 does not duplicate the architecture from Phase 1.
+Phase 2 does not duplicate the Phase-1 architecture.
 
 The same:
 
@@ -776,62 +1560,149 @@ BERT
 Tabular MLP
 Cross-Attention
 Task Heads
+CineFusionModel
 ```
 
 are reused.
 
-### Reuse the same supervised loss
+## Reuse the same supervised loss
 
-`model_losses.py` remains responsible for the four task losses in both phases.
+`model_losses.py` remains responsible for the four supervised tasks in both phases.
 
-Phase 2 only adds:
+Phase 2 adds the contrastive objective through `contrastive_loss.py` and composes it through the Phase-2 loss layer where needed.
 
-```text
-contrastive_loss.py
-```
+## Keep model selection away from the test set
 
-to the existing supervised objective.
-
-### Keep model selection away from the test set
-
-Cross-validation and hyperparameter tuning operate on development data.
+Cross-validation, Optuna, Phase-2 development experiments, threshold finding, and temperature scaling operate on development data.
 
 The test set is reserved for the final evaluation.
 
-### Keep metric calculation centralized
+## Keep metric calculation centralized
 
-`metrics.py` provides the common metric implementation used by:
+`metrics.py` is the common implementation for development metrics and final test metrics.
 
-- cross-validation
-- final evaluation
+It calculates performance; it does not tune the model.
+
+## Keep calibration separate
+
+`calibration.py` learns temperatures and thresholds.
+
+`metrics.py` consumes those fixed values to evaluate predictions.
+
+## Keep expensive backbone computation reusable
+
+`embedding_cache.py` can cache frozen backbone sections without caching trainable projected embeddings.
 
 ---
 
-# Current Development Status
+# 21. One-Sentence Responsibility of Every Major Stage
 
 ```text
-Data preparation                 ✓
-Target creation                  ✓
-Chronological splitting          ✓
-Tabular preprocessing            ✓
-Featurization                    ✓
-MovieDataset                     ✓
-DataLoader                       ✓
-Dataset validation               ✓
+Data preparation
+→ make leakage-safe multimodal samples.
 
-Next:
-ViT encoder
-BERT encoder
-Tabular encoder
-Cross-Attention
-Task Heads
-CineFusion-X model
-Model losses
+Shared model
+→ encode and fuse poster, text, and metadata.
+
+Phase 1
+→ learn the four supervised tasks.
+
+Cross-validation + Optuna
+→ choose the Phase-1 configuration using development data.
+
+Final training
+→ retrain the selected model using all development data.
+
+Phase 2
+→ improve multimodal alignment while continuing supervised learning.
+
+Calibration
+→ learn confidence scaling and genre decision thresholds from development data.
+
+Uncertainty
+→ estimate prediction variability with MC Dropout.
+
 Metrics
-Phase 1 training
-Cross-validation
-Hyperparameter tuning
-Contrastive loss
-Phase 2 training
+→ measure model performance without changing model decisions.
+
 Final evaluation
+→ run the locked pipeline once on the untouched 2019+ test set.
+```
+
+---
+
+# 22. Final Mental Model
+
+CineFusion-X can be viewed as six layers:
+
+```text
+1. DATA
+   ↓
+   Turn movie records into clean, leakage-safe multimodal samples.
+
+2. MODEL
+   ↓
+   Encode poster, text, and metadata and fuse them.
+
+3. PHASE 1
+   ↓
+   Learn the four supervised movie tasks.
+
+4. PHASE 2
+   ↓
+   Add explicit multimodal representation alignment while
+   continuing supervised task learning.
+
+5. CALIBRATION + UNCERTAINTY
+   ↓
+   Calibrate confidence, learn genre decision thresholds,
+   and optionally estimate uncertainty.
+
+6. FINAL EVALUATION
+   ↓
+   Evaluate the fully locked pipeline on the untouched
+   future-period test set.
+```
+
+The complete conceptual architecture is:
+
+```text
+                    CINEFUSION-X
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+        Poster         Overview       Metadata
+          │              │              │
+         ViT            BERT           MLP
+          │              │              │
+          └──────────────┼──────────────┘
+                         ▼
+                 Multimodal Attention
+                         │
+                         ▼
+                 Fused Representation
+                         │
+          ┌──────────────┼──────────────┐
+          │              │              │
+        Genre          Rating       Box Office
+          │              │              │
+          └──────────────┼──────────────┘
+                         │
+                         ▼
+                  Content Rating
+
+Phase 1:
+    supervised multitask learning
+
+Phase 2:
+    supervised multitask learning
+    + multimodal contrastive alignment
+
+Post-training:
+    temperature scaling
+    + genre threshold finding
+    + optional MC-Dropout uncertainty
+
+Final:
+    metrics on untouched 2019+ test data
 ```
