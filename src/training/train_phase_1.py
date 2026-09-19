@@ -1,4 +1,3 @@
-import mlflow
 import torch
 
 from src.evaluation.metrics import (
@@ -24,12 +23,11 @@ def train_phase_1(
     val_loader,
     tabular_input_dim,
     learning_rate,
+    weight_decay,
     epochs,
     tabular_hidden_dim,
     embedding_dim,
     rating_max_error,
-    parameter_path=None,
-    return_full_metrics=None,
 ):
     """
     Train one Phase-1 configuration on one CV fold.
@@ -40,12 +38,8 @@ def train_phase_1(
     Phase-1 objective:
         L_phase1 = L_task
 
-    Returns: float or dict
-        If return_full_metrics=None:
-            best_composte_score
-
-        If return_full_metrics not None:
-            returnes best_metrics alongside best_composite_score
+    Returns: tuple
+        best_composte_score, best_epoch, val_loss_at_best_epoch
     """
 
     # Model
@@ -64,18 +58,19 @@ def train_phase_1(
     trainable_parameters = []
 
     for parameter in model.parameters():
-        if parameter.requires_grad():
-            trainable_parameters += parameter
+        if parameter.requires_grad:
+            trainable_parameters.append(parameter)
 
-    optimizer = torch.optim.adamw(
+    optimizer = torch.optim.AdamW(
         trainable_parameters,
         lr=learning_rate,
+        weight_decay=weight_decay,
     )
 
     # LERNING-RATE SCHEDULAR
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer,
-        model="max",
+        mode="max",
         factor=0.5,
         patience=3,
     )
@@ -84,18 +79,9 @@ def train_phase_1(
     early_stopping_patience = 15
     epochs_without_improvement = 0
 
-    # MLflow Parameters
-    mlflow.log_params(
-        {
-            "tabular_input_dim": tabular_input_dim,
-            "device": str(DEVICE),
-            "rating_max_error": rating_max_error,
-            "return_full_metrics": return_full_metrics,
-        }
-    )
-
     # BEST VALIDATION LOSS & BEST EPOCH TRACKING
     best_composite_score = float("-inf")
+    val_loss_at_best_epoch = float("inf")
     best_epoch = 0
 
     # EPOCH LOOP
@@ -126,11 +112,15 @@ def train_phase_1(
             }
 
             # Clear old gradients
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
             # Forward pass
             # Using Mixed Precision training with FP16/BF16 instead of purely FP32
-            with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+            with torch.autocast(
+                device_type=DEVICE.type,
+                dtype=torch.bfloat16,
+                enabled=DEVICE.type == "cuda",
+            ):
                 outputs = model(
                     pixel_values=pixel_values,
                     input_ids=input_ids,
@@ -138,22 +128,14 @@ def train_phase_1(
                     features=features,
                 )
 
-            # Calculate the multitasked masked loss
-            losses = criterion(
-                predictions=outputs["predictions"],
-                targets=targets,
-                masks=masks,
-            )
+                # Calculate the multitasked masked loss
+                losses = criterion(
+                    predictions=outputs["predictions"],
+                    targets=targets,
+                    masks=masks,
+                )
 
             total_loss = losses["total_loss"]
-
-            print(
-                f"\rEpoch {epoch + 1}/{epochs} | "
-                f"Batch {batch_idx}/{len(train_loader)} | "
-                f"Loss: {total_loss.item():.4f}",
-                end="",
-                flush=True,
-            )
 
             # Backpropogation
             total_loss.backward()
@@ -162,6 +144,14 @@ def train_phase_1(
             optimizer.step()
 
             running_train_loss += total_loss.item()
+
+            print(
+                f"\rEpoch {epoch + 1}/{epochs} | "
+                f"Batch {batch_idx}/{len(train_loader)} | "
+                f"Loss: {total_loss.item():.4f}",
+                end="",
+                flush=True,
+            )
 
         print()
 
@@ -192,7 +182,7 @@ def train_phase_1(
         all_content_rating_targets = []
         all_content_rating_masks = []
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for batch in val_loader:
                 pixel_values = batch["pixel_values"].to(DEVICE)
                 input_ids = batch["input_ids"].to(DEVICE)
@@ -214,7 +204,11 @@ def train_phase_1(
                 }
 
                 # Forward pass
-                with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+                with torch.autocast(
+                    device_type=DEVICE.type,
+                    dtype=torch.bfloat16,
+                    enabled=DEVICE.type == "cuda",
+                ):
                     outputs = model(
                         pixel_values=pixel_values,
                         input_ids=input_ids,
@@ -222,12 +216,12 @@ def train_phase_1(
                         features=features,
                     )
 
-                # Validation loss
-                losses = criterion(
-                    predictions=outputs["predictions"],
-                    targets=targets,
-                    masks=masks,
-                )
+                    # Validation loss
+                    losses = criterion(
+                        predictions=outputs["predictions"],
+                        targets=targets,
+                        masks=masks,
+                    )
 
                 running_val_loss += losses["total_loss"].item()
 
@@ -384,7 +378,7 @@ def train_phase_1(
             rating_max_error=rating_max_error,
         )
 
-        # Learning-rate scheduler
+        # LEARNING-RATE SCHEDULER
         # Internally checking the composite score if have increased or not.
         scheduler.step(composite_score)
 
@@ -396,64 +390,15 @@ def train_phase_1(
 
         if composite_score > best_composite_score:
             best_composite_score = composite_score
-            best_val_loss = val_loss
+            val_loss_at_best_epoch = val_loss
             best_epoch = epoch + 1
 
             # Reset early-stopping counter because the model improved.
             epochs_without_improvement = 0
 
-            # Saving all of the metrics for the best epoch
-            # in the memory for each fold
-
-            # And returned ONLY when return_full_metrics=True.
-            # Meaning for the best config giving best composite score.
-
-            best_metrics = {
-                "best_epoch": best_epoch,
-                "best_val_loss": best_val_loss,
-                "composite_score": best_composite_score,
-                "genre": genre_metrics,
-                "rating": rating_metrics,
-                "box_office": box_office_metrics,
-                "content_rating": content_rating_metrics,
-            }
-
-            # Save checkpoint
-
-            if parameter_path is not None:
-                torch.save(
-                    {
-                        "epoch": best_epoch,
-                        "model_state_dict": model.state_dict(),
-                        "optimizer_state_dict": optimizer.state_dict(),
-                        "val_loss": best_val_loss,
-                        "tabular_input_dim": tabular_input_dim,
-                        "tabular_hidden_dim": tabular_hidden_dim,
-                        "embedding_dim": embedding_dim,
-                        "learning_rate": learning_rate,
-                    },
-                    parameter_path,
-                )
-
         else:
             # No improvement in validation composite score.
             epochs_without_improvement += 1
-
-        # MLFLOW EPOCH LOGGING
-
-        # Detailed metrics logged
-        # ONLY for the best configuration achieved.
-
-        if return_full_metrics:
-            mlflow.log_metrics(
-                {
-                    "train_loss": train_loss,
-                    "val_loss": val_loss,
-                    "composite_score": composite_score,
-                    "learning_rate": current_learning_rate,
-                },
-                step=epoch + 1,
-            )
 
         # CONFIRMATION OUTPUT
         print(
@@ -465,120 +410,11 @@ def train_phase_1(
         )
 
         # EARLY STOPPING
+
         if epochs_without_improvement >= early_stopping_patience:
             print(f"Early stopping triggered after {epoch + 1} epochs. Best epoch: {best_epoch}")
             break
 
-    # RESTORE BEST CHECKPOINT
+    # RETURN
 
-    # Restore the best model state found during training.
-    if parameter_path is not None:
-        checkpoint = torch.load(
-            parameter_path,
-            map_location=DEVICE,
-            weights_only=False,
-        )
-
-        model.load_state_dict(checkpoint["model_state_dict"])
-
-    # SAFETY CHECK
-    if best_metrics is None:
-        raise RuntimeError("No valid best epoch was found during training")
-
-    # MLFLOW SUMMARY
-
-    # Logging once (the best epoch)
-    # for each fold of each config
-
-    mlflow.log_metrics(
-        {
-            "best_val_loss": best_val_loss,
-            "best_epoch": best_epoch,
-            "best_composite_score": best_composite_score,
-        }
-    )
-
-    # DETAILED COMPLETE METRICS
-
-    # ONLY logging them for the best selected configuration
-
-    if return_full_metrics:
-        # OVERALL METRICS
-
-        mlflow.log_metrics(
-            {
-                # Genre
-                "best_genre_macro_f1": best_metrics["genre"]["macro_f1"],
-                "best_genre_micro_f1": best_metrics["genre"]["micro_f1"],
-                "best_genre_macro_precision": best_metrics["genre"]["macro_precision"],
-                # Rating
-                "best_rating_mae": best_metrics["rating"]["mae"],
-                "best_rating_rmse": best_metrics["rating"]["rmse"],
-                # Box Office
-                "best_box_office_macro_f1": best_metrics["box_office"]["macro_f1"],
-                "best_box_office_weighted_f1": best_metrics["box_office"]["weighted_f1"],
-                "best_box_office_accuracy": best_metrics["box_office"]["accuracy"],
-                "best_box_office_balanced_accuracy": best_metrics["box_office"][
-                    "balanced_accuracy"
-                ],
-                "best_box_office_macro_precision": best_metrics["box_office"]["macro_precision"],
-                # Content Rating
-                "best_content_rating_macro_f1": best_metrics["content_rating"]["macro_f1"],
-                "best_content_rating_weighted_f1": best_metrics["content_rating"]["weighted_f1"],
-                "best_content_rating_accuracy": best_metrics["content_rating"]["accuracy"],
-                "best_content_rating_balanced_accuracy": best_metrics["content_rating"][
-                    "balanced_accuracy"
-                ],
-                "best_content_rating_macro_precision": best_metrics["content_rating"][
-                    "macro_precision"
-                ],
-            }
-        )
-
-        # PER-GENRE METRICS
-
-        genre_metrics = {}
-
-        for genre_name, genre_values in best_metrics["genre"]["per_genre"].items():
-            genre_metrics[f"{genre_name}_f1"] = genre_values["f1"]
-            genre_metrics[f"{genre_name}_precision"] = genre_values["precision"]
-            genre_metrics[f"{genre_name}_recall"] = genre_values["recall"]
-
-        mlflow.log_metrics(genre_metrics)
-
-        # BOX OFFICE PER-CLASS METRICS
-
-        box_office_metrics = {}
-
-        for class_name, class_values in best_metrics["box_office"]["per_class"].items():
-            box_office_metrics[f"{class_name}_f1"] = class_values["f1"]
-            box_office_metrics[f"{class_name}_precision"] = class_values["precision"]
-            box_office_metrics[f"{class_name}_recall"] = class_values["recall"]
-            box_office_metrics[f"{class_name}_support"] = class_values["support"]
-
-        mlflow.log_metrics(box_office_metrics)
-
-        # CONTENT RATING PER-CLASS METRICS
-
-        content_rating_metrics = {}
-
-        for class_name, class_values in best_metrics["content_rating"]["per_class"].items():
-            content_rating_metrics[f"{class_name}_f1"] = class_values["f1"]
-            content_rating_metrics[f"{class_name}_precision"] = class_values["precision"]
-            content_rating_metrics[f"{class_name}_recall"] = class_values["recall"]
-            content_rating_metrics[f"{class_name}_support"] = class_values["support"]
-
-        mlflow.log_metrics(content_rating_metrics)
-
-    # CHECKPOINT ARTIFACT
-
-    if parameter_path is not None:
-        mlflow.log_artifact(str(parameter_path), artifact_path="parameters")
-
-    # RETURNING the details metrics (NOT per-class)
-    # for the best conifugration
-
-    if return_full_metrics:
-        return best_metrics
-
-    return best_composite_score
+    return best_composite_score, best_epoch, val_loss_at_best_epoch

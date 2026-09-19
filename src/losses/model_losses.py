@@ -3,6 +3,7 @@ import torch.nn as nn
 
 
 class MultiTaskLoss(nn.Module):
+    content_rating_class_weights: torch.Tensor
     """
     Calculate the supervised multitask loss of the system.
 

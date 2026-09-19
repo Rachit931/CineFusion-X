@@ -60,10 +60,10 @@ class CineFusionModel(nn.Module):
 
     def forward(
         self,
-        pixel_values: torch.tensor,
-        input_ids: torch.tensor,
-        attention_mask: torch.tensor,
-        features: torch.tensor,
+        pixel_values: torch.Tensor,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        features: torch.Tensor,
     ):
         """
         Inputs:

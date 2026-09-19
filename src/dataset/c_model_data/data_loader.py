@@ -49,7 +49,7 @@ train_dataset = MovieDataset(
     vit_image_transform,
     bert_tokenizer,
     POSTERS_DIR,
-    max_text_length=512,
+    max_text_length=256,
 )
 
 test_dataset = MovieDataset(
@@ -57,7 +57,7 @@ test_dataset = MovieDataset(
     vit_image_transform,
     bert_tokenizer,
     POSTERS_DIR,
-    max_text_length=512,
+    max_text_length=256,
 )
 
 # Create training loader for pytorch

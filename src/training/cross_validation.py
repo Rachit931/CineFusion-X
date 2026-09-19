@@ -59,7 +59,14 @@ def cross_validate(
         {
             "mean_composite_score": float,
             "std_composite_score": float,
-            "fold_results": [..]
+            "mean_best_epoch": float,
+            "fold_results": [
+                {
+                    "fold": int
+                    "composite_score: float,
+                    "best_epoch: float
+                }
+            ]
         }
     """
 
@@ -138,22 +145,19 @@ def cross_validate(
                 }
             )
 
-            # Logging the current configuration that is being evaluation for a particular fold
-            mlflow.log_params(config)
-
             # TRAIN ONE FOLD
+            # For one fold: best composite score, best epoch, best val loss out of all the epoch
 
-            fold_composite_score = train_phase_1(
+            fold_composite_score, best_epoch, val_loss_at_best_epoch = train_phase_1(
                 train_loader=fold_train_loader,
                 val_loader=fold_val_loader,
                 tabular_input_dim=tabular_input_dim,
                 learning_rate=config["learning_rate"],
+                weight_decay=config["weight_decay"],
                 epochs=config["epochs"],
                 tabular_hidden_dim=config["tabular_hidden_dim"],
                 embedding_dim=config["embedding_dim"],
                 rating_max_error=rating_max_error,
-                parameter_path=None,
-                return_full_metrics=False,
             )
 
             # SAFETY CHECK
@@ -163,43 +167,90 @@ def cross_validate(
                     f"Fold {fold} produced a non-finitecomposite_score: {fold_composite_score}"
                 )
 
-            # STORING COMPOSITE SCORES ACROSS EACH FOLDS
+            if best_epoch <= 0:
+                raise RuntimeError(f"Fold {fold} produced an invalid best epoch: {best_epoch}")
 
-            fold_results.append({"fold": fold, "composite_score": float(fold_composite_score)})
+            # LOG FOLD RESULTS
 
-        print(f"Fold {fold} complete | Best Composite Score: {fold_composite_score:.4f}")
+            mlflow.log_metrics(
+                {
+                    "best_composite_score": float(fold_composite_score),
+                    "best_epoch": int(best_epoch),
+                    "best_val_loss": float(val_loss_at_best_epoch),
+                }
+            )
 
-    # FINDING AGGREGRATION OF CMOPOSITE SCORES ACCROSS EACH FOLD
+            fold_results.append(
+                {
+                    "fold": fold,
+                    "composite_score": float(fold_composite_score),
+                    "best_epoch": int(best_epoch),
+                    "val_loss_at_best_epoch": float(val_loss_at_best_epoch),
+                }
+            )
+
+        print(
+            f"Fold {fold} complete | "
+            f"Best Composite Score: {fold_composite_score:.4f}"
+            f"Best Epoch: {best_epoch}"
+            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch}"
+        )
+
+    # AGGREGATE CROSS-VALIDATION RESULTS
 
     composite_scores = []
-    for score in fold_results:
-        composite_scores.append(score["composite_score"])
+    for result in fold_results:
+        composite_scores.append(result["composite_score"])
+
+    best_epochs = []
+    for result in fold_results:
+        best_epochs.append(result["best_epoch"])
+
+    val_losses = []
+    for result in fold_results:
+        val_losses.append(result["val_loss_at_best_epoch"])
 
     mean_composite_score = float(np.mean(composite_scores))
 
     std_composite_score = float(np.std(composite_scores))
 
+    mean_best_epoch = float(np.mean(best_epochs))
+
+    mean_val_loss_at_best_epoch = float(np.mean(val_losses))
+
     # MLFLOW CONFIGURATION SUMMARY
 
-    # This logging is done once for every configuration.
-    # provided cross_validate() is running inside a parent MLflow run.
+    # At this point the nested fold run has ended,
+    # so the active run is the parent Optuna trial run.
 
-    mlflow.log_metrics(
-        {
-            "mean_cv_composite_score": mean_composite_score,
-            "std_cv_composite_score": std_composite_score,
-        }
-    )
+    if mlflow.active_run() is not None:
+        mlflow.log_metrics(
+            {
+                "mean_cv_composite_score": mean_composite_score,
+                "std_cv_composite_score": std_composite_score,
+                "mean_best_epoch": mean_best_epoch,
+                "mean_val_loss": mean_val_loss_at_best_epoch,
+            }
+        )
 
     # SUMMARY
 
-    utils.print_section("CROSS VALIDATON SUMMARY")
+    utils.print_section("CROSS VALIDATION SUMMARY")
 
     print(f"Mean CV Composite Score: {mean_composite_score:.4f}")
+
     print(f"Std CV Composite Score: {std_composite_score:.4f}")
+
+    print(f"Mean Best Epoch: {mean_best_epoch:.2f}")
+
+    print(f"Mean Val Loss: {mean_val_loss_at_best_epoch:.4f}")
+
+    # RETURN
 
     return {
         "mean_composite_score": mean_composite_score,
         "std_composite_score": std_composite_score,
+        "mean_best_epoch": mean_best_epoch,
+        "mean_val_loss_at_best_epoch": mean_val_loss_at_best_epoch,
         "fold_results": fold_results,
     }
