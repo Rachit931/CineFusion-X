@@ -11,6 +11,7 @@ from sklearn.metrics import (
     mean_squared_error,
     precision_score,
     recall_score,
+    roc_auc_score,
 )
 
 
@@ -33,6 +34,7 @@ def _apply_mask(values, mask):
     mask:
         [N] boolean / 0-1 array
     """
+
     values = _to_numpy(values)
 
     if mask is None:
@@ -42,49 +44,147 @@ def _apply_mask(values, mask):
     return values[mask]
 
 
-# GENRE - 19 label Multi-class classification
+# Safe One-vs-Rest ROC-AUC
+
+
+def _safe_ovr_roc_auc_values(
+    binary_targets,
+    probabilities,
+):
+    """
+    Calculate one-vs-rest ROC-AUC once for every class.
+
+    Each column in binary_targets represents one class.
+    Classes that contain only one target value are assigned NaN,
+    because ROC-AUC is undefined for them.
+    """
+
+    binary_targets = _to_numpy(binary_targets)
+    probabilities = _to_numpy(probabilities)
+
+    if binary_targets.ndim != 2:
+        raise ValueError(f"binary_targets must have shape [N,C]. Given: {binary_targets.shape}")
+
+    if probabilities.ndim != 2:
+        raise ValueError(f"probabilities must have shape [N,C]. Given: {probabilities.shape}")
+
+    if binary_targets.shape != probabilities.shape:
+        raise ValueError(
+            "binary_targets and probabilities must have the same shape. "
+            f"Given: {binary_targets.shape} vs {probabilities.shape}"
+        )
+
+    roc_auc_values = []
+
+    for class_index in range(binary_targets.shape[1]):
+        class_targets = binary_targets[:, class_index]
+
+        if len(np.unique(class_targets)) < 2:
+            roc_auc_values.append(np.nan)
+            continue
+
+        roc_auc_values.append(
+            float(
+                roc_auc_score(
+                    class_targets,
+                    probabilities[:, class_index],
+                )
+            )
+        )
+
+    return roc_auc_values
+
+
+def _safe_multilabel_roc_auc(
+    targets,
+    probabilities,
+):
+    """
+    Calculate macro ROC-AUC for a multi-label task.
+
+    Labels that contain only one target class are skipped,
+    because ROC-AUC is undefined for them.
+    """
+
+    roc_auc_values = _safe_ovr_roc_auc_values(
+        targets,
+        probabilities,
+    )
+
+    valid_values = [value for value in roc_auc_values if not np.isnan(value)]
+
+    if not valid_values:
+        return np.nan
+
+    return float(np.mean(valid_values))
+
+
+# Genre - 19 Label Multi-Label Classification
 
 
 def calculate_genre_probabilities(
     probabilities,
     targets,
     mask=None,
+    threshold=0.5,
 ):
-    """ "
-    Calculate metrics for 19-label multi-label genre classificiation.
+    """
+    Calculate metrics for 19-label multi-label genre classification.
 
     Probabilities:
-        [N,19] sigmoid probabilities for each independent 19 labels.
+        [N,19] sigmoid probabilities for each independent label.
 
     Targets:
         [N,19] binary ground-truth labels.
 
     Mask:
         [N] validity mask.
-        Only samples with mask value == 1 are evaulated.
+        Only samples with mask value == 1 are evaluated.
+
+    Threshold:
+        Threshold used to convert probabilities into binary
+        predictions.
     """
 
     probabilities = _to_numpy(probabilities)
-    targets = _to_numpy(targets).astype[int]
+    targets = _to_numpy(targets).astype(int)
 
     if probabilities.ndim != 2 or probabilities.shape[1] != 19:
         raise ValueError(
-            f"Genre probabilities must have shape [N,19]. Given : {probabilities.shape}"
+            f"Genre probabilities must have shape [N,19]. Given: {probabilities.shape}"
         )
 
     if targets.ndim != 2 or targets.shape[1] != 19:
-        raise ValueError(f"Genre targets must have shape [N,19],Given : {targets.shape}")
+        raise ValueError(f"Genre targets must have shape [N,19]. Given: {targets.shape}")
+
+    if probabilities.shape[0] != targets.shape[0]:
+        raise ValueError(
+            "Number of genre predictions and targets must match: "
+            f"{probabilities.shape[0]} vs {targets.shape[0]}"
+        )
 
     # Apply sample-level mask before evaluation.
     if mask is not None:
         probabilities = _apply_mask(probabilities, mask)
         targets = _apply_mask(targets, mask)
 
-    # Phase 1 uses a fixed threshold of 0.5
-    # Will be configured later in phase 2
-    predictions = (probabilities >= 0.5).astype(int)
+    # Convert probabilities into binary predictions.
+    predictions = (probabilities >= threshold).astype(int)
 
-    # Overall metrics
+    # Calculate one ROC-AUC value per genre exactly once.
+    genre_roc_auc_values = _safe_ovr_roc_auc_values(
+        targets,
+        probabilities,
+    )
+
+    valid_genre_roc_auc_values = [value for value in genre_roc_auc_values if not np.isnan(value)]
+
+    if valid_genre_roc_auc_values:
+        macro_roc_auc = float(np.mean(valid_genre_roc_auc_values))
+    else:
+        macro_roc_auc = np.nan
+
+    # Overall metrics.
     metrics: dict[str, Any] = {
         "macro_f1": float(
             f1_score(
@@ -110,9 +210,18 @@ def calculate_genre_probabilities(
                 zero_division=0,
             )
         ),
+        "macro_recall": float(
+            recall_score(
+                targets,
+                predictions,
+                average="macro",
+                zero_division=0,
+            )
+        ),
+        "macro_roc_auc": macro_roc_auc,
     }
 
-    # Per-Genre metrics
+    # Per-genre metrics.
     f1 = f1_score(
         targets,
         predictions,
@@ -141,12 +250,13 @@ def calculate_genre_probabilities(
             "f1": float(f1[i]),
             "precision": float(precision[i]),
             "recall": float(recall[i]),
+            "roc_auc": genre_roc_auc_values[i],
         }
 
     return metrics
 
 
-# Normal multi class classification
+# Normal Multi-Class Classification
 
 
 def calculate_classification_metrics(
@@ -156,53 +266,53 @@ def calculate_classification_metrics(
     class_names=None,
 ):
     """
-    Calculate metrics for a multi class classification task.
+    Calculate metrics for a multi-class classification task.
 
-    probabilities:
+    Probabilities:
         [N,C] softmax probabilities.
 
-    targets:
+    Targets:
         [N] integer class labels.
 
-    mask:
+    Mask:
         [N] validity mask.
-
     """
 
     probabilities = _to_numpy(probabilities)
     targets = _to_numpy(targets).astype(int)
 
-    # Check Shapes
+    # Check shapes.
     if probabilities.ndim != 2:
-        raise ValueError(f"Probabilities must have shape [N,C] got {probabilities.shape}")
+        raise ValueError(f"Probabilities must have shape [N,C]. Got {probabilities.shape}")
 
     if targets.ndim != 1:
-        raise ValueError(f"Targets must have shape [N], got {targets.shape}")
+        raise ValueError(f"Targets must have shape [N]. Got {targets.shape}")
 
     if probabilities.shape[0] != targets.shape[0]:
         raise ValueError(
             f"Number of samples must match: {probabilities.shape[0]} vs {targets.shape[0]}"
         )
 
-    # Apply mask
+    # Apply mask.
     probabilities = _apply_mask(probabilities, mask)
     targets = _apply_mask(targets, mask)
 
-    # Highest probablity = predicted class
-    predictions = np.argmax(probabilities, axis=1)
+    # Highest probability = predicted class.
+    predictions = np.argmax(
+        probabilities,
+        axis=1,
+    )
 
     num_classes = probabilities.shape[1]
 
-    # Default class names
+    # Default class names.
     if class_names is None:
-        class_names = []
-        for i in range(num_classes):
-            class_names.append(f"class_{i}")
+        class_names = [f"class_{i}" for i in range(num_classes)]
 
     if len(class_names) != num_classes:
         raise ValueError(f"Expected {num_classes} class names, got {len(class_names)}")
 
-    # Overall metrics
+    # Overall classification metrics.
     metrics: dict[str, Any] = {
         "macro_f1": float(
             f1_score(
@@ -240,9 +350,32 @@ def calculate_classification_metrics(
                 zero_division=0,
             )
         ),
+        "macro_recall": float(
+            recall_score(
+                targets,
+                predictions,
+                average="macro",
+                zero_division=0,
+            )
+        ),
     }
 
-    # Per class matrices
+    # Calculate one one-vs-rest ROC-AUC value per class exactly once.
+    multiclass_binary_targets = (targets[:, None] == np.arange(num_classes)[None, :]).astype(int)
+
+    class_roc_auc_values = _safe_ovr_roc_auc_values(
+        multiclass_binary_targets,
+        probabilities,
+    )
+
+    valid_class_roc_auc_values = [value for value in class_roc_auc_values if not np.isnan(value)]
+
+    if valid_class_roc_auc_values:
+        metrics["macro_roc_auc"] = float(np.mean(valid_class_roc_auc_values))
+    else:
+        metrics["macro_roc_auc"] = np.nan
+
+    # Per-class metrics.
     report = classification_report(
         targets,
         predictions,
@@ -253,18 +386,20 @@ def calculate_classification_metrics(
     )
 
     metrics["per_class"] = {}
-    for class_name in class_names:
+
+    for class_index, class_name in enumerate(class_names):
         metrics["per_class"][f"class_{class_name}"] = {
             "f1": float(report[class_name]["f1-score"]),
             "precision": float(report[class_name]["precision"]),
             "recall": float(report[class_name]["recall"]),
             "support": int(report[class_name]["support"]),
+            "roc_auc": class_roc_auc_values[class_index],
         }
 
     return metrics
 
 
-# Box-OFffice : 4-Class Classification
+# Box Office - 4-Class Classification
 
 
 def calculate_box_office_metrics(
@@ -273,13 +408,13 @@ def calculate_box_office_metrics(
     mask,
 ):
     """
-    Metric for 4-class box-office classification.
+    Metrics for 4-class box-office classification.
 
     Class mapping:
-    0 = Flop,
-    1 = Average
-    2 = Hit
-    3 = Blockbuster
+        0 = Flop
+        1 = Average
+        2 = Hit
+        3 = Blockbuster
     """
 
     return calculate_classification_metrics(
@@ -295,7 +430,7 @@ def calculate_box_office_metrics(
     )
 
 
-# Content Rating : 4-Class classification
+# Content Rating - 4-Class Classification
 
 
 def calculate_content_rating_metrics(
@@ -304,13 +439,13 @@ def calculate_content_rating_metrics(
     mask,
 ):
     """
-    Metrics for 4-class content-rating clssification.
+    Metrics for 4-class content-rating classification.
 
     Class mapping:
-    0 = G
-    1 = PG
-    2 = PG-13
-    3 = R
+        0 = G
+        1 = PG
+        2 = PG-13
+        3 = R
     """
 
     return calculate_classification_metrics(
@@ -329,7 +464,11 @@ def calculate_content_rating_metrics(
 # Rating - Regression
 
 
-def calculate_rating_metrics(predictions, targets, mask):
+def calculate_rating_metrics(
+    predictions,
+    targets,
+    mask,
+):
     """
     Metrics for rating regression.
 
@@ -339,15 +478,15 @@ def calculate_rating_metrics(predictions, targets, mask):
     """
 
     predictions = _to_numpy(predictions).reshape(-1)
-    targets = _to_numpy(targets)
+    targets = _to_numpy(targets).reshape(-1)
 
     if predictions.shape[0] != targets.shape[0]:
         raise ValueError(
-            f"Number of predictions and targets must match"
+            "Number of predictions and targets must match: "
             f"{predictions.shape[0]} vs {targets.shape[0]}"
         )
 
-    # Apply mask
+    # Apply mask.
     predictions = _apply_mask(predictions, mask)
     targets = _apply_mask(targets, mask)
 
@@ -373,7 +512,7 @@ def calculate_rating_metrics(predictions, targets, mask):
 def get_classification_outputs(
     probabilities,
     targets,
-    mask,
+    mask=None,
     class_names=None,
 ):
     """
@@ -385,29 +524,46 @@ def get_classification_outputs(
     targets = _to_numpy(targets).astype(int)
 
     if probabilities.ndim != 2:
-        raise ValueError(f"Probabilities must have shape [N,C], got {probabilities.shape}")
+        raise ValueError(f"Probabilities must have shape [N,C]. Got {probabilities.shape}")
 
     if targets.ndim != 1:
-        raise ValueError(f"Targets must have shape [N], got {targets.shape}")
+        raise ValueError(f"Targets must have shape [N]. Got {targets.shape}")
 
-    # Apply mask
-    probabilities = _apply_mask(probabilities, mask)
-    targets = _apply_mask(targets, mask)
+    if probabilities.shape[0] != targets.shape[0]:
+        raise ValueError(
+            f"Number of samples must match: {probabilities.shape[0]} vs {targets.shape[0]}"
+        )
 
-    predictions = np.argmax(probabilities, axis=1)
+    # Apply mask.
+    probabilities = _apply_mask(
+        probabilities,
+        mask,
+    )
+    targets = _apply_mask(
+        targets,
+        mask,
+    )
+
+    predictions = np.argmax(
+        probabilities,
+        axis=1,
+    )
 
     num_classes = probabilities.shape[1]
 
-    class_names = []
-    for i in range(num_classes):
-        class_names.append(f"class_{i}")
+    if class_names is None:
+        class_names = [f"class_{i}" for i in range(num_classes)]
 
     if len(class_names) != num_classes:
         raise ValueError(f"Expected {num_classes} class names, got {len(class_names)}")
 
     return {
         "predictions": predictions,
-        "confusion_matrix": confusion_matrix(targets, predictions, labels=np.arange(num_classes)),
+        "confusion_matrix": confusion_matrix(
+            targets,
+            predictions,
+            labels=np.arange(num_classes),
+        ),
         "classification_report": classification_report(
             targets,
             predictions,
@@ -419,7 +575,7 @@ def get_classification_outputs(
     }
 
 
-# Composite or Combined score
+# Composite Score
 
 
 def compute_composite_score(
@@ -430,25 +586,27 @@ def compute_composite_score(
     rating_max_error,
 ):
     """
-    Calculates a single score from combining these metrics
-    with each config for it's each fold.
+    Calculate a single higher-is-better score
+    for model selection.
 
-    Classification metrics are already in [0,1] :
-        Because metrics used of those 3 tasks naturally
-        lie between [0,1].
+    Classification metrics are already in [0,1].
 
-    Rating MAE will be converted into a score lying between
-    [0,1] as well.
+    Rating MAE is converted into a score in [0,1]:
 
-    Now all four metrics will have same weight for computation.
+        rating_score =
+            max(0, 1 - rating_mae / rating_max_error)
+
+    All four tasks receive equal weight.
+
+    ROC-AUC is not included in this composite score.
     """
 
     if rating_max_error <= 0:
-        raise ValueError("rating_mae_baseline must be greater than 0.")
+        raise ValueError("rating_max_error must be greater than 0.")
 
     rating_score = max(
         0.0,
-        1.0 - rating_mae / rating_max_error,
+        1.0 - (rating_mae / rating_max_error),
     )
 
     return float(
