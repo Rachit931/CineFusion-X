@@ -193,6 +193,7 @@ def cross_validate(
             f"Fold {fold} complete | "
             f"Best Composite Score: {fold_composite_score:.4f}"
             f"Best Epoch: {best_epoch}"
+            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch}"
         )
 
     # AGGREGATE CROSS-VALIDATION RESULTS
@@ -215,7 +216,7 @@ def cross_validate(
 
     mean_best_epoch = float(np.mean(best_epochs))
 
-    mean_val_loss = float(np.mean(val_losses))
+    mean_val_loss_at_best_epoch = float(np.mean(val_losses))
 
     # MLFLOW CONFIGURATION SUMMARY
 
@@ -228,7 +229,7 @@ def cross_validate(
                 "mean_cv_composite_score": mean_composite_score,
                 "std_cv_composite_score": std_composite_score,
                 "mean_best_epoch": mean_best_epoch,
-                "mean_val_loss": mean_val_loss,
+                "mean_val_loss": mean_val_loss_at_best_epoch,
             }
         )
 
@@ -242,7 +243,7 @@ def cross_validate(
 
     print(f"Mean Best Epoch: {mean_best_epoch:.2f}")
 
-    print(f"Mean Val Loss: {mean_val_loss:.4f}")
+    print(f"Mean Val Loss: {mean_val_loss_at_best_epoch:.4f}")
 
     # RETURN
 
@@ -250,6 +251,6 @@ def cross_validate(
         "mean_composite_score": mean_composite_score,
         "std_composite_score": std_composite_score,
         "mean_best_epoch": mean_best_epoch,
-        "mean_val_loss": mean_val_loss,
+        "mean_val_loss_at_best_epoch": mean_val_loss_at_best_epoch,
         "fold_results": fold_results,
     }

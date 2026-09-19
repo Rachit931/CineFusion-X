@@ -113,6 +113,15 @@ def objective(trial, dataset=train_dataset):
 
     config = suggest_config(trial)
 
+    print(
+        f"\nTrial {trial.number + 1}/{N_TRIALS} | "
+        f"LR: {config['learning_rate']:.3e} | "
+        f"Weight Decay: {config['weight_decay']:.3e} | "
+        f"Epochs: {config['epochs']} | "
+        f"Tabular Hidden Dim: {config['tabular_hidden_dim']} | "
+        f"Embedding Dim: {config['embedding_dim']}"
+    )
+
     # TRIAL MLFLOW RUN
 
     with mlflow.start_run(
@@ -149,12 +158,21 @@ def objective(trial, dataset=train_dataset):
 
         mean_best_epoch = cv_results["mean_best_epoch"]
 
-        mean_val_loss = cv_results["mean_val_loss"]
+        mean_val_loss_at_best_epoch = cv_results["mean_val_loss_at_best_epoch"]
+
+        print(
+            f"Trial {trial.number + 1}/{N_TRIALS} complete | "
+            f"Mean CV Composite: {mean_composite_score:.4f} | "
+            f"Std: {std_composite_score:.4f} | "
+            f"Mean Best Epoch: {mean_best_epoch:.2f} | "
+            f"Mean Val Loss at Best Epoch: "
+            f"{mean_val_loss_at_best_epoch}"
+        )
 
         # STORE ADDITIONAL TRIAL CONFIGURATION
 
         trial.set_user_attr(
-            "std_cv_composite",
+            "std_cv_composite_score",
             std_composite_score,
         )
 
@@ -165,7 +183,7 @@ def objective(trial, dataset=train_dataset):
 
         trial.set_user_attr(
             "mean_val_loss_at_best_epoch",
-            mean_val_loss,
+            mean_val_loss_at_best_epoch,
         )
 
         # OBJECTIVE VALUE
@@ -303,7 +321,7 @@ def run_phase1_hyperparameter_tuning(
             {
                 "best_cv_composite_score": best_cv_composite_score,
                 "best_mean_epoch": mean_best_epoch,
-                "best_mean_val_loss_as_per_best_epoch": mean_val_loss_at_best_epoch,
+                "best_mean_val_loss_at_best_epoch": mean_val_loss_at_best_epoch,
             }
         )
 
