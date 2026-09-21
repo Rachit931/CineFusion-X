@@ -73,6 +73,13 @@ def cross_validate(
     # REPRODUCIBILITY
     set_seed(seed)
 
+    # SAFETY CHECK
+    if dataset.cache_mode != "phase1_cache":
+        raise ValueError("Phase 1 cross-validation requires cache_mode='phase1_cache'.")
+
+    if dataset.cache_split != "train":
+        raise ValueError("Phase 1 cross-validation requires the train cache split.")
+
     # INPUT DIMENSION
     tabular_input_dim = dataset.features.shape[1]
 
@@ -142,6 +149,7 @@ def cross_validate(
                     "seed": seed,
                     "batch_size": BATCH_SIZE,
                     "device": str(DEVICE),
+                    "cache_mode": dataset.cache_mode,
                 }
             )
 
@@ -229,7 +237,7 @@ def cross_validate(
                 "mean_cv_composite_score": mean_composite_score,
                 "std_cv_composite_score": std_composite_score,
                 "mean_best_epoch": mean_best_epoch,
-                "mean_val_loss": mean_val_loss_at_best_epoch,
+                "mean_val_loss_at_best_epoch": mean_val_loss_at_best_epoch,
             }
         )
 
