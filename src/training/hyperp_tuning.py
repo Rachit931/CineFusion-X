@@ -9,7 +9,7 @@ from config.paths import (
     METRICS_DIR,
     MODEL_CONFIG_DIR,
 )
-from src.dataset.c_model_data.data_loader import train_dataset
+from src.dataset.c_model_data.data_loader import create_dataset
 from src.training.cross_validation import (
     BATCH_SIZE,
     N_SPLITS,
@@ -35,7 +35,7 @@ N_TRIALS = 27
 RATING_MAX_ERROR = 10.0
 
 MIN_EPOCHS = 100
-MAX_EPOCHS = 175
+MAX_EPOCHS = 200
 EPOCH_STEP = 25
 
 EMBEDDING_DIM = 256
@@ -93,7 +93,7 @@ def suggest_config(trial):
 # OPTUNA OBJECTIVE
 
 
-def objective(trial, dataset=train_dataset):
+def objective(trial, dataset):
     """
     Run one Optuna trial.
 
@@ -194,9 +194,7 @@ def objective(trial, dataset=train_dataset):
 # MAIN PHASE - 1 HYPERPARAMETER TUNING
 
 
-def run_phase1_hyperparameter_tuning(
-    dataset=train_dataset,
-):
+def run_phase1_hyperparameter_tuning():
     """
     Run the complete Phase-1 hyperparameter search.
     Flow:
@@ -217,6 +215,10 @@ def run_phase1_hyperparameter_tuning(
     Final Phase-1 training is NOT performed here.
     It is owned by train_final.py.
     """
+    dataset = create_dataset(
+        cache_mode="phase1_cache",
+        split="train",
+    )
 
     utils.print_section("PHASE-1 HYPERPARAMETER TUNING")
 
@@ -357,6 +359,4 @@ def run_phase1_hyperparameter_tuning(
 
 
 if __name__ == "__main__":
-    run_phase1_hyperparameter_tuning(
-        dataset=train_dataset,
-    )
+    run_phase1_hyperparameter_tuning()
