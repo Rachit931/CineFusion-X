@@ -39,7 +39,7 @@ def train_phase_1(
         L_phase1 = L_task
 
     Returns: tuple
-        best_composte_score, best_epoch, val_loss_at_best_epoch
+        best_composite_score, best_epoch, val_loss_at_best_epoch
     """
 
     # Model
