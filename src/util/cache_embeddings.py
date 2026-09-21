@@ -189,7 +189,7 @@ def generate_cache_for_split(
 
     # Saving the exact data point ordering used by this dataset.
 
-    imdb_ids = dataset.data["imdb_id"].astype(str).to_numpy()
+    imdb_ids = dataset.data["imdb_id"].astype(str).to_numpy(dtype=str)
 
     np.save(
         imdb_ids_path,
@@ -303,6 +303,13 @@ def generate_cache_for_split(
             # Progress
 
             processed = batch_end
+            percentage = (processed / total_samples) * 100
+
+            print(
+                f"\r{split_name} | {processed:,} / {total_samples:,} ({percentage:.2f}%)",
+                end="",
+                flush=True,
+            )
 
     print(
         f"\r{split_name} | {processed} / {total_samples} points",
