@@ -153,7 +153,7 @@ class ViTEncoder(nn.Module):
 
         # Running only the trainable transformer blocks
         for block in list(vit.blocks)[:frozen_blocks]:
-            x = block[x]
+            x = block(x)
 
         # All the representations after the frozen layers
         return x
@@ -176,7 +176,7 @@ class ViTEncoder(nn.Module):
 
         # Only the trainable blocks are executed.
         for block in list(self.vit.blocks)[start_block:]:
-            x = block[x]
+            x = block(x)
 
         # Final normalization used by the ViT after the Transformer blocks.
         x = self.vit.norm(x)

@@ -196,7 +196,7 @@ class BERTEncoder(nn.Module):
         start_layer = self.total_layers - self.trainable_layers
 
         # Only the trainable layers are executed.
-        for layer in list(bert.encoder.layer)[start_layer]:
+        for layer in list(bert.encoder.layer)[start_layer:]:
             hidden_states = layer(
                 hidden_states,
                 attention_mask=extended_attention_mask,
