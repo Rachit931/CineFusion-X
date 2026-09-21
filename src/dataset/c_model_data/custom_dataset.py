@@ -41,6 +41,7 @@ class MovieDataset(Dataset):
         max_text_length=256,
         cache_mode="normal",
         cache_dir=None,
+        cache_split="train",
     ):
 
         super().__init__()
@@ -59,6 +60,7 @@ class MovieDataset(Dataset):
             )
 
         self.cache_mode = cache_mode
+        self.cache_split = cache_split
 
         # Load the featurized dataset
         self.data = pd.read_csv(
@@ -209,7 +211,7 @@ class MovieDataset(Dataset):
         ram at once.
         """
 
-        phase_directory = self.cache_dir / self.cache_mode
+        phase_directory = self.cache_dir / self.cache_split
 
         if not phase_directory.exists():
             raise FileNotFoundError(f"Cache directory not found: {phase_directory}")
