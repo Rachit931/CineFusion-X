@@ -1,3 +1,9 @@
+# Generated ML artifacts
+artifacts/**
+!artifacts/**/
+!artifacts/.gitkeep
+!artifacts/**/.gitkeep
+
 # Build / generated files
 .web/
 *.py[cod]

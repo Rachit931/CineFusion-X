@@ -224,7 +224,9 @@ def run_phase1_hyperparameter_tuning(
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
 
-    study = optuna.create_study(direction="maximize", sampler=sampler, study_name="Phase_1_eval")
+    study = optuna.create_study(
+        direction="maximize", sampler=sampler, study_name="Phase_1_hyperparameter_tuning"
+    )
 
     # TOP LEVEL MLFLOW RUN
 

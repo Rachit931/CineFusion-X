@@ -47,6 +47,7 @@ def train_phase_1(
         tabular_input_dim=tabular_input_dim,
         tabular_hidden_dim=tabular_hidden_dim,
         embedding_dim=embedding_dim,
+        cache_mode="phase1_cache",
     )
 
     model = model.to(DEVICE)
@@ -92,9 +93,8 @@ def train_phase_1(
         running_train_loss = 0.0
 
         for batch_idx, batch in enumerate(train_loader, start=1):
-            pixel_values = batch["pixel_values"].to(DEVICE)
-            input_ids = batch["input_ids"].to(DEVICE)
-            attention_mask = batch["attention_mask"].to(DEVICE)
+            cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
+            cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
             features = batch["features"].to(DEVICE)
 
             targets = {
@@ -122,10 +122,9 @@ def train_phase_1(
                 enabled=DEVICE.type == "cuda",
             ):
                 outputs = model(
-                    pixel_values=pixel_values,
-                    input_ids=input_ids,
-                    attention_mask=attention_mask,
                     features=features,
+                    cached_visual_embedding=cached_visual_embedding,
+                    cached_text_embedding=cached_text_embedding,
                 )
 
                 # Calculate the multitasked masked loss
@@ -184,9 +183,8 @@ def train_phase_1(
 
         with torch.inference_mode():
             for batch in val_loader:
-                pixel_values = batch["pixel_values"].to(DEVICE)
-                input_ids = batch["input_ids"].to(DEVICE)
-                attention_mask = batch["attention_mask"].to(DEVICE)
+                cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
+                cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
                 features = batch["features"].to(DEVICE)
 
                 targets = {
@@ -210,10 +208,9 @@ def train_phase_1(
                     enabled=DEVICE.type == "cuda",
                 ):
                     outputs = model(
-                        pixel_values=pixel_values,
-                        input_ids=input_ids,
-                        attention_mask=attention_mask,
                         features=features,
+                        cached_visual_embedding=cached_visual_embedding,
+                        cached_text_embedding=cached_text_embedding,
                     )
 
                     # Validation loss
