@@ -14,7 +14,8 @@ from src.training.train_phase_1 import train_phase_1
 
 N_SPLITS = 3
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
+VAL_BATCH_SIZE = 128
 NUM_WORKERS = 4
 
 SEED = 42
@@ -133,7 +134,7 @@ def cross_validate(
 
         fold_val_loader = DataLoader(
             fold_val_dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=VAL_BATCH_SIZE,
             shuffle=False,
             num_workers=NUM_WORKERS,
             pin_memory=True,
