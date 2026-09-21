@@ -197,9 +197,9 @@ def generate_cache_for_split(
         allow_pickle=False,
     )
 
-    vit_cache = None
-    bert_cache = None
-    attention_mask_cache = None
+    vit_cache: np.memmap | None = None
+    bert_cache: np.memmap | None = None
+    attention_mask_cache: np.memmap | None = None
 
     total_samples = len(dataset)
 
@@ -282,9 +282,10 @@ def generate_cache_for_split(
 
             write_index = batch_end
 
-            # ------------------------------------------------------------
             # Write ViT and BERT representations.
-            # ------------------------------------------------------------
+
+            assert vit_cache is not None
+            assert bert_cache is not None
 
             vit_cache[batch_start:batch_end] = vit_numpy
 
@@ -293,6 +294,8 @@ def generate_cache_for_split(
             # Save Phase 2 attention masks.
 
             if CACHE_MODE == "phase2_cache":
+                assert attention_mask_cache is not None
+
                 attention_mask_numpy = attention_mask.detach().cpu().numpy()
 
                 attention_mask_cache[batch_start:batch_end] = attention_mask_numpy

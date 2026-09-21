@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import timm
 from dotenv import load_dotenv
@@ -31,6 +32,9 @@ if CACHE_MODE not in VALID_CACHE_MODES:
     raise ValueError(f"CACHE_MODE must be one of {VALID_CACHE_MODES}, instead got '{CACHE_MODE}")
 
 # Selecting the phase-specific cache directory
+
+CACHE_DIR: Path | None
+
 if CACHE_MODE == "phase1_cache":
     CACHE_DIR = PHASE1_CACHE_DIR
 

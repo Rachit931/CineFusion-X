@@ -189,16 +189,16 @@ class MovieDataset(Dataset):
             if cache_dir is None:
                 raise ValueError("cache_dir is required when cache_mode is not 'normal'")
 
-            self.cache_dir = Path(cache_dir)
+            self.cache_dir: Path | None = Path(cache_dir)
 
             self._load_cache_files()
 
         else:
             self.cache_dir = None
 
-            self.vit_cache = None
-            self.bert_cache = None
-            self.cache_attention_mask = None
+            self.vit_cache: np.ndarray | None = None
+            self.bert_cache: np.ndarray | None = None
+            self.cache_attention_mask: np.ndarray | None = None
 
     # Cache Loading
 
@@ -272,6 +272,12 @@ class MovieDataset(Dataset):
         and that the dimensions matches with the dataset size.
         """
 
+        assert self.vit_cache is not None
+        assert self.bert_cache is not None
+
+        if self.cache_mode == "phase2_cache":
+            assert self.cache_attention_mask is not None
+
         # For comparison
 
         dataset_ids = self.data["imdb_id"].astype(str).to_numpy()
@@ -331,6 +337,10 @@ class MovieDataset(Dataset):
         # Phase 2 shape validation
 
         if self.cache_mode == "phase2_cache":
+            assert self.vit_cache is not None
+            assert self.bert_cache is not None
+            assert self.cache_attention_mask is not None
+
             if self.vit_cache.ndim != 3:
                 raise ValueError("Phase 2 ViT cache must have shape [N, num_tokens, 768].")
 
@@ -388,6 +398,8 @@ class MovieDataset(Dataset):
         # NORMAL MODE WITHOUT CACHING
 
         if self.cache_mode == "normal":
+            assert self.poster_dir is not None
+
             # Matching poster
             # matching poster as per the imdb_id
             poster_path = self.poster_dir / f"{imdb_id}.jpg"
@@ -429,6 +441,9 @@ class MovieDataset(Dataset):
             # Read only this movie's cached embeddings.
             # The full cache remains memory-mapped on disk.
 
+            assert self.vit_cache is not None
+            assert self.bert_cache is not None
+
             vit_embedding = torch.from_numpy(np.array(self.vit_cache[index], copy=True))
 
             bert_embedding = torch.from_numpy(np.array(self.bert_cache[index], copy=True))
@@ -453,6 +468,10 @@ class MovieDataset(Dataset):
         if self.cache_mode == "phase2_cache":
             # Read only a data point's cached frozen outputs upto a
             # certain transformer block.
+
+            assert self.vit_cache is not None
+            assert self.bert_cache is not None
+            assert self.cache_attention_mask is not None
 
             vit_embedding = torch.from_numpy(np.array(self.vit_cache[index], copy=True))
 
