@@ -63,6 +63,12 @@ PARAMETERS_DIR = ARTIFACTS_DIR / "parameters"
 MODEL_CONFIG_DIR = ARTIFACTS_DIR / "config"
 
 METRICS_DIR = ARTIFACTS_DIR / "metrics"
+
+CACHING_DIR = ARTIFACTS_DIR / "cache"
+
+PHASE1_CACHE_DIR = CACHING_DIR / "phase1_cache"
+
+PHASE2_CACHE_DIR = CACHING_DIR / "phase2_cache"
 # Automatically create folders
 
 DIRECTORIES = [
@@ -89,6 +95,7 @@ DIRECTORIES = [
     PARAMETERS_DIR,
     MODEL_CONFIG_DIR,
     METRICS_DIR,
+    CACHING_DIR,
 ]
 
 for directory in DIRECTORIES:
