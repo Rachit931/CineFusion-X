@@ -22,7 +22,7 @@ def _to_numpy(array):
     """
 
     if hasattr(array, "detach"):
-        return array.detach().cpu().numpy()
+        return array.detach().float().cpu().numpy()
 
     return np.asarray(array)
 

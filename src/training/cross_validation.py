@@ -7,14 +7,15 @@ from sklearn.model_selection import TimeSeriesSplit
 from torch.utils.data import DataLoader, Subset
 
 import src.utils as utils
-from src.dataset.c_model_data.data_loader import train_dataset
+from src.dataset.c_model_data.data_loader import create_dataset
 from src.training.train_phase_1 import train_phase_1
 
 # CONFIGURATION
 
 N_SPLITS = 3
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
+VAL_BATCH_SIZE = 128
 NUM_WORKERS = 4
 
 SEED = 42
@@ -39,7 +40,7 @@ def set_seed(seed):
 def cross_validate(
     config,
     rating_max_error,
-    dataset=train_dataset,
+    dataset,
     n_splits=N_SPLITS,
     seed=SEED,
 ):
@@ -133,7 +134,7 @@ def cross_validate(
 
         fold_val_loader = DataLoader(
             fold_val_dataset,
-            batch_size=BATCH_SIZE,
+            batch_size=VAL_BATCH_SIZE,
             shuffle=False,
             num_workers=NUM_WORKERS,
             pin_memory=True,
@@ -201,7 +202,7 @@ def cross_validate(
             f"Fold {fold} complete | "
             f"Best Composite Score: {fold_composite_score:.4f}"
             f"Best Epoch: {best_epoch}"
-            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch}"
+            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch:.4f}"
         )
 
     # AGGREGATE CROSS-VALIDATION RESULTS

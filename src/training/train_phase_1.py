@@ -39,7 +39,7 @@ def train_phase_1(
         L_phase1 = L_task
 
     Returns: tuple
-        best_composte_score, best_epoch, val_loss_at_best_epoch
+        best_composite_score, best_epoch, val_loss_at_best_epoch
     """
 
     # Model
@@ -53,7 +53,7 @@ def train_phase_1(
     model = model.to(DEVICE)
 
     # LOSS
-    criterion = MultiTaskLoss()
+    criterion = MultiTaskLoss().to(DEVICE)
 
     # OPTIMIZER
     trainable_parameters = []
@@ -77,7 +77,7 @@ def train_phase_1(
     )
 
     # EARLY STOPPING
-    early_stopping_patience = 15
+    early_stopping_patience = 7
     epochs_without_improvement = 0
 
     # BEST VALIDATION LOSS & BEST EPOCH TRACKING
@@ -399,11 +399,11 @@ def train_phase_1(
 
         # CONFIRMATION OUTPUT
         print(
-            f"Epoch [{epoch + 1}/{epochs}]"
-            f"Train Loss: {train_loss:.4f}"
-            f"Val Loss: {val_loss:.4f}"
-            f"Composite: {composite_score:.4f}"
-            f"LR: {current_learning_rate:.6g}"
+            f"Epoch [{epoch + 1}/{epochs}] "
+            f" Train Loss: {train_loss:.4f} "
+            f" Val Loss: {val_loss:.4f} "
+            f" Composite: {composite_score:.4f} "
+            f" LR: {current_learning_rate:.6g} "
         )
 
         # EARLY STOPPING
