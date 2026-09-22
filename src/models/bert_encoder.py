@@ -137,14 +137,13 @@ class BERTEncoder(nn.Module):
         Generate the Phase 2 cache.
 
         The frozen BERT layers are executed and the output
-        immediately before the trainable BERT layers is
-        returned .
+        immediately before the trainable BERT layers is returned.
 
         Unlike the Phase 1 cache, this contains the representation
         for every token.
 
         Shape:
-            [batch_size, sequence_lenght, 768]
+            [batch_size, sequence_length, 768]
         """
 
         if self.trainable_layers <= 0:
@@ -155,31 +154,33 @@ class BERTEncoder(nn.Module):
         # BERT embedding layer
         hidden_states = bert.embeddings(input_ids=input_ids)
 
-        # Build the same extended attention mask used by BERT.
-        extended_attention_mask = bert.get_extended_attention_mask(
-            attention_mask,
-            input_ids.shape,
-            input_ids.device,
+        # Convert the normal 2D padding mask:
+        # [batch_size, sequence_length]
+        # into a broadcastable 4D mask:
+        # [batch_size, 1, 1, sequence_length]
+        attention_mask_4d = attention_mask[:, None, None, :].to(
+            device=hidden_states.device,
+            dtype=torch.bool,
         )
 
         # Number of frozen layers
         frozen_layers = self.total_layers - self.trainable_layers
 
-        # Run only the fronzen BERT Layers
+        # Run only the frozen BERT layers
         for layer in list(bert.encoder.layer)[:frozen_layers]:
             hidden_states = layer(
                 hidden_states,
-                attention_mask=extended_attention_mask,
-            )[0]
+                attention_mask=attention_mask_4d,
+            )
 
-        # This is the exact boundary where the trainable layers begin.
+        # Exact boundary where trainable layers begin
         return hidden_states
 
     def forward_phase2_cached(self, hidden_states, attention_mask):
         """
         Continue Phase 2 from a cached frozen representation.
 
-        Only the trainable BERT layers will be executed now.
+        Only the trainable BERT layers are executed now.
         """
 
         if self.trainable_layers <= 0:
@@ -187,24 +188,28 @@ class BERTEncoder(nn.Module):
 
         bert = self.bert
 
-        extended_attention_mask = bert.get_extended_attention_mask(
-            attention_mask,
-            hidden_states.shape[:2],
-            hidden_states.device,
+        # Convert:
+        # [batch_size, sequence_length]
+        # ->
+        # [batch_size, 1, 1, sequence_length]
+        attention_mask_4d = attention_mask[:, None, None, :].to(
+            device=hidden_states.device,
+            dtype=torch.bool,
         )
 
         start_layer = self.total_layers - self.trainable_layers
 
-        # Only the trainable layers are executed.
+        # Only the trainable layers are executed
         for layer in list(bert.encoder.layer)[start_layer:]:
             hidden_states = layer(
                 hidden_states,
-                attention_mask=extended_attention_mask,
-            )[0]
+                attention_mask=attention_mask_4d,
+            )
 
         # CLS token
         cls_embedding = hidden_states[:, 0, :]
 
+        # Projection
         text_embedding = self.projection(cls_embedding)
 
         return text_embedding
