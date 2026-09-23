@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class MultiTaskLoss(nn.Module):
@@ -280,4 +281,230 @@ class MultiTaskLoss(nn.Module):
             "rating_loss": rating_loss,
             "box_office_loss": box_office_loss,
             "content_rating_loss": content_rating_loss,
+        }
+
+
+class MultimodalContrastiveLoss(nn.Module):
+    """
+    Symmetric visual-text contrastive loss.
+
+    The visual and text embeddings must represent the same batch
+    of movies in the same embedding space.
+
+    For a batch of B movies:
+
+        Visual_embeddings : [B,D]
+        Text_embeddings   : [B,D]
+        Tabular_embeddings: [B,D]
+
+    The similarity matrix is:
+
+        [B,B]
+
+    where:
+        similarity[i,i] = positive visual-text pair
+        similarity[i,j] = negative pair for i != j
+
+    The loss is calculated in multiple direcitions:
+
+        visual -> text
+        text   -> visual
+
+        visual -> tabular
+        tabular-> visual
+
+        text   -> tabular
+        tabular-> text
+
+    Total contrastive loss :
+        (total 6 contrastive losses) / 6
+    """
+
+    def __init__(
+        self,
+        temperature: float = 0.07,
+    ):
+
+        super().__init__()
+
+        if temperature <= 0:
+            raise ValueError("temperature must be greater than 0")
+
+        self.temperature = temperature
+        self.contrastive_loss_fn = nn.CrossEntropyLoss()
+
+    def _pairwise_contrastive_loss(
+        self,
+        anchor_embeddings: torch.Tensor,
+        target_embeddings: torch.Tensor,
+    ):
+        """
+        Calculate one directional contrastive loss.
+
+        Each anchor embedding must identify it's matching target
+        embedding among all target embeddings in the batch.
+
+        Input:
+            anchor_embeddings: [B,D]
+            target_embeddings: [B,D]
+
+        Output: torch.tensor formatted contrastive loss
+        alongside with the other previous losses.
+        """
+
+        # L2-normalize both modality representations.
+
+        # After normalization, the dot product is used
+        # for cosine similarity
+
+        anchor_embeddings = F.normalize(
+            anchor_embeddings,
+            p=2,
+            dim=1,
+        )
+
+        target_embeddings = F.normalize(
+            target_embeddings,
+            p=2,
+            dim=1,
+        )
+
+        # Compute all anchor-target similarities
+        # Transposing the non anchor embeddings
+        # [B,D] * [D,B] = [B,B]
+
+        similarity_logits = (
+            anchor_embeddings @ target_embeddings.transpose(0, 1)
+        ) / self.temperature
+
+        # The correct target for anchor i is target i.
+        # Example for B = 4:
+        # Labels = [0,1,2,3]
+        labels = torch.arange(
+            anchor_embeddings.size(0),
+            device=anchor_embeddings.device,
+        )
+
+        return self.contrastive_loss_fn(similarity_logits, labels)
+
+    def forward(
+        self,
+        visual_embedding: torch.Tensor,
+        text_embedding: torch.Tensor,
+        tabular_embedding: torch.Tensor,
+    ):
+        """
+        Caculating the six directional contrastive losses.
+
+        Inputs:
+            visual_embeddings:
+                shape: [B,D]
+
+            text_embeddings:
+                shape: [B,D]
+
+            tabular_embeddings:
+                shape: [B,D]
+
+        Outputs:
+            dict
+                {
+                "contrastive_loss",
+                "visual_to_text_loss",
+                "text_to_visual_loss",
+                "visual_to_tabular_loss",
+                "tabular_to_visual_loss",
+                "text_to_tabular_loss",
+                "tabular_to_text_loss",
+            }
+        """
+
+        # Validating the dimensions
+        if visual_embedding.dim() != 2:
+            raise ValueError("visual_embeddings must have shape [B,D]")
+
+        if text_embedding.dim() != 2:
+            raise ValueError("text_embeddings must have shape [B,D]")
+
+        if tabular_embedding.dim() != 2:
+            raise ValueError("tabular_embeddings must have shape [B,d]")
+
+        # All three modalities must have the same batch size
+        batch_size = visual_embedding.size(0)
+
+        if text_embedding.size(0) != batch_size:
+            raise ValueError("visual_embedding and text_embedding must have the same batch size.")
+
+        if tabular_embedding.size(0) != batch_size:
+            raise ValueError("visual_embedding and tabular_embedding must have the same batch size")
+
+        # All three embeddings must share the same dimensionality.
+        embedding_dim = visual_embedding.size(1)
+
+        if text_embedding.size(1) != embedding_dim:
+            raise ValueError(
+                "visual_embedding and text_embedding must have the same embedding dimension"
+            )
+
+        if tabular_embedding.size(1) != embedding_dim:
+            raise ValueError(
+                "visual_embedding and tabular_embedding must have the same embedding dimension"
+            )
+
+        # Visual <--> Text
+
+        visual_to_text_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=visual_embedding,
+            target_embeddings=tabular_embedding,
+        )
+
+        text_to_visual_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=text_embedding,
+            target_embeddings=visual_embedding,
+        )
+
+        # Visual <--> Tabular
+
+        visual_to_tabular_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=visual_embedding,
+            target_embeddings=tabular_embedding,
+        )
+
+        tabular_to_visual_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=tabular_embedding,
+            target_embeddings=visual_embedding,
+        )
+
+        # Text <--> Tabular
+
+        text_to_tabular_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=text_embedding,
+            target_embeddings=tabular_embedding,
+        )
+
+        tabular_to_text_loss = self._pairwise_contrastive_loss(
+            anchor_embeddings=tabular_embedding,
+            target_embeddings=text_embedding,
+        )
+
+        # Combining all the six directional losses.
+        # Equally weighting across all the six directions
+
+        contrastive_loss = (
+            visual_to_text_loss
+            + text_to_visual_loss
+            + visual_to_tabular_loss
+            + tabular_to_visual_loss
+            + text_to_tabular_loss
+            + tabular_to_text_loss
+        ) / 6.0
+
+        return {
+            "contrastive_loss": contrastive_loss,
+            "visual_to_text_loss": visual_to_text_loss,
+            "text_to_visual_loss": text_to_visual_loss,
+            "visual_to_tabular_loss": visual_to_tabular_loss,
+            "tabular_to_visual_loss": tabular_to_visual_loss,
+            "text_to_tabular_loss": text_to_tabular_loss,
+            "tabular_to_text_loss": tabular_to_text_loss,
         }
