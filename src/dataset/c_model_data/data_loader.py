@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import timm
 from dotenv import load_dotenv
@@ -13,7 +12,6 @@ from config.paths import (
     POSTERS_DIR,
 )
 from src.dataset.c_model_data.custom_dataset import MovieDataset
-
 
 load_dotenv()
 
@@ -34,42 +32,6 @@ VALID_SPLITS = {
 }
 
 
-def _get_master_path(split):
-    """
-    Return the correct master dataset path for the requested split.
-    """
-
-    if split not in VALID_SPLITS:
-        raise ValueError(
-            f"split must be one of {VALID_SPLITS}, got '{split}'"
-        )
-
-    if split == "train":
-        return MASTER_TRAIN
-
-    return MASTER_TEST
-
-
-def _get_cache_dir(cache_mode):
-    """
-    Return the cache directory corresponding to the requested cache mode.
-    """
-
-    if cache_mode == "normal":
-        return None
-
-    if cache_mode == "phase1_cache":
-        return PHASE1_CACHE_DIR
-
-    if cache_mode == "phase2_cache":
-        return PHASE2_CACHE_DIR
-
-    raise ValueError(
-        f"cache_mode must be one of {VALID_CACHE_MODES}, "
-        f"got '{cache_mode}'"
-    )
-
-
 def _create_normal_preprocessing():
     """
     Create the ViT image transform and BERT tokenizer.
@@ -87,9 +49,7 @@ def _create_normal_preprocessing():
     )
 
     # Resolve preprocessing configuration
-    vit_data_config = timm.data.resolve_model_data_config(
-        vit_model
-    )
+    vit_data_config = timm.data.resolve_model_data_config(vit_model)
 
     vit_image_transform = timm.data.create_transform(
         **vit_data_config,
@@ -131,13 +91,27 @@ def create_dataset(
     """
 
     if cache_mode not in VALID_CACHE_MODES:
-        raise ValueError(
-            f"cache_mode must be one of {VALID_CACHE_MODES}, "
-            f"got '{cache_mode}'"
-        )
+        raise ValueError(f"cache_mode must be one of {VALID_CACHE_MODES}, got '{cache_mode}'")
 
-    master_path = _get_master_path(split)
-    cache_dir = _get_cache_dir(cache_mode)
+    if cache_mode not in VALID_SPLITS:
+        raise ValueError(f"split must be one of {VALID_SPLITS}, got '{split}")
+
+    # Master dataset as per the split
+    if split == "train":
+        master_path = MASTER_TRAIN
+
+    else:
+        master_path = MASTER_TEST
+
+    # Cache mode as per the input
+    cache_dir = None
+
+    # Cache mode as per the input
+    if cache_mode == "phase1_cache":
+        cache_dir = PHASE1_CACHE_DIR
+
+    elif cache_mode == "phase2_cache":
+        cache_dir = PHASE2_CACHE_DIR
 
     # Defaults for cache modes.
     vit_image_transform = None

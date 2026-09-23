@@ -7,7 +7,6 @@ from sklearn.model_selection import TimeSeriesSplit
 from torch.utils.data import DataLoader, Subset
 
 import src.utils as utils
-from src.dataset.c_model_data.data_loader import create_dataset
 from src.training.train_phase_1 import train_phase_1
 
 # CONFIGURATION
@@ -200,9 +199,9 @@ def cross_validate(
 
         print(
             f"Fold {fold} complete | "
-            f"Best Composite Score: {fold_composite_score:.4f}"
-            f"Best Epoch: {best_epoch}"
-            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch:.4f}"
+            f"Best Composite Score: {fold_composite_score:.4f} "
+            f"Best Epoch: {best_epoch} "
+            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch:.4f} "
         )
 
     # AGGREGATE CROSS-VALIDATION RESULTS
