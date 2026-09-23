@@ -199,9 +199,9 @@ def cross_validate(
 
         print(
             f"Fold {fold} complete | "
-            f"Best Composite Score: {fold_composite_score:.4f}"
-            f"Best Epoch: {best_epoch}"
-            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch:.4f}"
+            f"Best Composite Score: {fold_composite_score:.4f} "
+            f"Best Epoch: {best_epoch} "
+            f"Best Val Loss At Best Epoch: {val_loss_at_best_epoch:.4f} "
         )
 
     # AGGREGATE CROSS-VALIDATION RESULTS

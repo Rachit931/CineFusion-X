@@ -93,12 +93,18 @@ def create_dataset(
     if cache_mode not in VALID_CACHE_MODES:
         raise ValueError(f"cache_mode must be one of {VALID_CACHE_MODES}, got '{cache_mode}'")
 
+    if cache_mode not in VALID_SPLITS:
+        raise ValueError(f"split must be one of {VALID_SPLITS}, got '{split}")
+
     # Master dataset as per the split
     if split == "train":
         master_path = MASTER_TRAIN
 
     else:
         master_path = MASTER_TEST
+
+    # Cache mode as per the input
+    cache_dir = None
 
     # Cache mode as per the input
     if cache_mode == "phase1_cache":
