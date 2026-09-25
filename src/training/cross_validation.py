@@ -7,7 +7,9 @@ from sklearn.model_selection import TimeSeriesSplit
 from torch.utils.data import DataLoader, Subset
 
 import src.utils as utils
-from src.training.training_config import train_phase_1
+from src.training.training_config import (
+    training,
+)
 
 # CONFIGURATION
 
@@ -42,6 +44,7 @@ def cross_validate(
     dataset,
     n_splits=N_SPLITS,
     seed=SEED,
+    phase="phase1",
 ):
     """
     Performing cross-validation for one configuration.
@@ -52,6 +55,13 @@ def cross_validate(
     2. Create the Dataloaders of those subsets.
     3. Train on Phase-1 model.
     4. Record the validation loss for that fold.
+
+    Phase 1 :
+        Uses the Phase 1 cache and supervised task loss.
+
+    Phase 2 :
+        Uses the Phase 2 cache and supervised +
+        multimodal contrastive loss.
 
     Test dataset will not be used.
 
@@ -70,18 +80,36 @@ def cross_validate(
         }
     """
 
+    # VALIDATING PHASE
+    phase = phase.lower()
+
+    if phase not in {"phase1", "phase2"}:
+        raise ValueError(f"phase must be either 'phase1' or 'phase2'. Got '{phase}'")
+
     # REPRODUCIBILITY
+
     set_seed(seed)
 
     # SAFETY CHECK
-    if dataset.cache_mode != "phase1_cache":
-        raise ValueError("Phase 1 cross-validation requires cache_mode='phase1_cache'.")
+
+    expected_cache_mode = f"{phase}_cache"
+
+    if dataset.cache_mode != expected_cache_mode:
+        raise ValueError(f"{phase} cross-validation requires cache_mode='{expected_cache_mode}'.")
 
     if dataset.cache_split != "train":
-        raise ValueError("Phase 1 cross-validation requires the train cache split.")
+        raise ValueError(f"{phase} cross-validation requires the train cache split.")
 
     # INPUT DIMENSION
     tabular_input_dim = dataset.features.shape[1]
+
+    # PHASE-SPECIFIC HYPERPARAMETERS
+
+    tabular_dropout = config["tabular_dropout"]
+    attention_dropout = config["attention_dropout"]
+
+    if phase == "phase2":
+        contrastive_temperature = config["contrastive_temperature"]
 
     # CREATE THE ORDERED FOLDS
 
@@ -111,13 +139,10 @@ def cross_validate(
         splitter.split(range(len(dataset))),
         start=1,
     ):
-        utils.print_section(f"PHASE-1 CROSS-VALIDATION - FOLD {fold}/{n_splits}")
+        utils.print_section(f"{phase.upper()} CROSS-VALIDATION - FOLD {fold}/{n_splits}")
 
         # CREATE FOLD DATASETS
-        fold_train_dataset = Subset(
-            dataset,
-            train_indices,
-        )
+        fold_train_dataset = Subset(dataset, train_indices)
 
         fold_val_dataset = Subset(dataset, val_indices)
 
@@ -142,21 +167,12 @@ def cross_validate(
 
         # MLflow FOLD RUN
         with mlflow.start_run(nested=True, run_name=f"fold_{fold}"):
-            mlflow.log_params(
-                {
-                    "fold": fold,
-                    "n_splits": n_splits,
-                    "seed": seed,
-                    "batch_size": BATCH_SIZE,
-                    "device": str(DEVICE),
-                    "cache_mode": dataset.cache_mode,
-                }
-            )
+            mlflow.log_param("fold", fold)
 
             # TRAIN ONE FOLD
             # For one fold: best composite score, best epoch, best val loss out of all the epoch
 
-            fold_composite_score, best_epoch, val_loss_at_best_epoch = train_phase_1(
+            fold_composite_score, best_epoch, val_loss_at_best_epoch = training(
                 train_loader=fold_train_loader,
                 val_loader=fold_val_loader,
                 tabular_input_dim=tabular_input_dim,
@@ -166,17 +182,11 @@ def cross_validate(
                 tabular_hidden_dim=config["tabular_hidden_dim"],
                 embedding_dim=config["embedding_dim"],
                 rating_max_error=rating_max_error,
+                tabular_dropout=tabular_dropout,
+                attention_dropout=attention_dropout,
+                contrastive_temp=contrastive_temperature,
+                phase=phase,
             )
-
-            # SAFETY CHECK
-
-            if not np.isfinite(fold_composite_score):
-                raise RuntimeError(
-                    f"Fold {fold} produced a non-finitecomposite_score: {fold_composite_score}"
-                )
-
-            if best_epoch <= 0:
-                raise RuntimeError(f"Fold {fold} produced an invalid best epoch: {best_epoch}")
 
             # LOG FOLD RESULTS
 

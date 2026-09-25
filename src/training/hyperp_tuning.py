@@ -15,7 +15,12 @@ from src.training.cross_validation import (
     N_SPLITS,
     NUM_WORKERS,
     SEED,
+    VAL_BATCH_SIZE,
     cross_validate,
+)
+from src.training.training_config import (
+    TRAINABLE_BERT_LAYERS,
+    TRAINABLE_VIT_BLOCKS,
 )
 
 # DEVICE
@@ -24,9 +29,15 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # OUTPUT FILES
 
-BEST_CONFIG = MODEL_CONFIG_DIR / "phase1_best_config.json"
+BEST_CONFIG = {
+    "phase1": MODEL_CONFIG_DIR / "phase1_best_config.json",
+    "phase2": MODEL_CONFIG_DIR / "phase2_best_config.json",
+}
 
-CV_RESULTS = METRICS_DIR / "phase1_cv_results.json"
+CV_RESULTS = {
+    "phase1": METRICS_DIR / "phase1_cv_results.json",
+    "phase2": METRICS_DIR / "phase2_cv_results.json",
+}
 
 # OPTUNE COFIGURATION
 
@@ -39,6 +50,13 @@ MAX_EPOCHS = 200
 EPOCH_STEP = 25
 
 EMBEDDING_DIM = 256
+
+MIN_DROPOUT = 0.0
+MAX_DROPOUT = 0.5
+DROPOUT_STEP = 0.05
+
+MIN_CONTRASTIVE_TEMPERATURE = 0.03
+MAX_CONTRASTIVE_TEMPERATURE = 0.20
 
 # JSON UTILITY
 
@@ -55,10 +73,21 @@ def save_json(data, path):
 # HYPERPARMETER SEARCH SPACE
 
 
-def suggest_config(trial):
+def suggest_config(trial, phase):
     """
-    Suggesting one Phase - 1 hyperparameter
+    Suggesting hyperparameter
     configuration for an Optuna trial.
+
+    Common hyperparameters:
+        - learning-rate
+        - weight_decay
+        - epochs
+        - tabular_hidden_dim
+        - tabular_dropout
+        - attention_dropout
+
+    Phase 2 additionally tunes:
+        -contrastive_tempearature
     """
 
     config = {
@@ -84,8 +113,28 @@ def suggest_config(trial):
             "tabular_hidden_dim",
             [256, 512],
         ),
+        "tabular_dropout": trial.suggest_float(
+            "tabular_dropout",
+            MIN_DROPOUT,
+            MAX_DROPOUT,
+            step=DROPOUT_STEP,
+        ),
+        "attention_dropout": trial.suggest_float(
+            "attention_dropout",
+            MIN_DROPOUT,
+            MAX_DROPOUT,
+            step=DROPOUT_STEP,
+        ),
         "embedding_dim": EMBEDDING_DIM,
     }
+
+    if phase == "phase2":
+        config["contrastive_temperature"] = trial.suggest_float(
+            "contrastive_temperature",
+            MIN_CONTRASTIVE_TEMPERATURE,
+            MAX_CONTRASTIVE_TEMPERATURE,
+            log=True,
+        )
 
     return config
 
@@ -93,7 +142,7 @@ def suggest_config(trial):
 # OPTUNA OBJECTIVE
 
 
-def objective(trial, dataset):
+def objective(trial, dataset, phase):
     """
     Run one Optuna trial.
 
@@ -111,7 +160,10 @@ def objective(trial, dataset):
     optimized by Optuna.
     """
 
-    config = suggest_config(trial)
+    config = suggest_config(
+        trial=trial,
+        phase=phase,
+    )
 
     print(
         f"\nTrial {trial.number + 1}/{N_TRIALS} | "
@@ -119,8 +171,13 @@ def objective(trial, dataset):
         f"Weight Decay: {config['weight_decay']:.3e} | "
         f"Epochs: {config['epochs']} | "
         f"Tabular Hidden Dim: {config['tabular_hidden_dim']} | "
-        f"Embedding Dim: {config['embedding_dim']}"
+        f"Embedding Dim: {config['embedding_dim']} | "
+        f"Tabular Dropout: {config['tabular_dropout']:.2f} | "
+        f"Attention Dropout: {config['attention_dropout']} | "
     )
+
+    if phase == "phase2":
+        print(f"Contrastive Temperature: {config['contrastive_temperature']:.4f}")
 
     # TRIAL MLFLOW RUN
 
@@ -129,14 +186,19 @@ def objective(trial, dataset):
         run_name=f"trial_{trial.number}",
     ):
         # Log the hyperparameter being evaluated
-        mlflow.log_params(
-            {
-                "learning_rate": config["learning_rate"],
-                "weight_decay": config["weight_decay"],
-                "epochs": config["epochs"],
-                "tabular_hidden_dim": config["tabular_hidden_dim"],
-            }
-        )
+        trial_params = {
+            "learning_rate": config["learning_rate"],
+            "weight_decay": config["weight_decay"],
+            "epochs": config["epochs"],
+            "tabular_hidden_dim": config["tabular_hidden_dim"],
+            "tabular_dropout": config["tabular_dropout"],
+            "attention_dropout": config["attention_dropout"],
+        }
+
+        if phase == "phase2":
+            trial_params["contrastive_temperature"] = config["contrastive_temperature"]
+
+        mlflow.log_params(trial_params)
 
         mlflow.log_param("trial_number", trial.number)
 
@@ -148,6 +210,7 @@ def objective(trial, dataset):
             dataset=dataset,
             n_splits=N_SPLITS,
             seed=SEED,
+            phase=phase,
         )
 
         # EXTRACT CV RESULTS
@@ -194,7 +257,7 @@ def objective(trial, dataset):
 # MAIN PHASE - 1 HYPERPARAMETER TUNING
 
 
-def run_phase1_hyperparameter_tuning():
+def run_hyperparameter_tuning(phase):
     """
     Run the complete Phase-1 hyperparameter search.
     Flow:
@@ -214,42 +277,104 @@ def run_phase1_hyperparameter_tuning():
 
     Final Phase-1 training is NOT performed here.
     It is owned by train_final.py.
+
+    Phase 1:
+        phase1_cache
+        supervised multitask objective
+
+    Phase 2:
+        phase2_cache
+        supervised multitask objective
+        + multimodal contrastive objective
     """
+    phase = phase.lower()
+
+    if phase not in {"phase1", "phase2"}:
+        raise ValueError("phase must be either 'phase1' or 'phase2'.")
+
+    # PHASE-SPECIFIC PATHS
+
+    best_config_path = BEST_CONFIG[phase]
+    cv_results_path = CV_RESULTS[phase]
+
+    cache_mode = f"{phase}_cache"
+
     dataset = create_dataset(
-        cache_mode="phase1_cache",
+        cache_mode=cache_mode,
         split="train",
     )
 
-    utils.print_section("PHASE-1 HYPERPARAMETER TUNING")
+    utils.print_section(f"{phase.upper()} HYPERPARAMETER TUNING")
 
     # OPTUNA STUDY
 
     sampler = optuna.samplers.TPESampler(seed=SEED)
 
     study = optuna.create_study(
-        direction="maximize", sampler=sampler, study_name="Phase_1_hyperparameter_tuning"
+        direction="maximize", sampler=sampler, study_name=f"{phase}_hyperparameter_tuning"
     )
 
     # TOP LEVEL MLFLOW RUN
 
-    with mlflow.start_run(run_name="phase1_hyperparameter_tuning"):
+    with mlflow.start_run(run_name=f"{phase}_hyperparameter_tuning"):
         # GLOBAL SEARCH SETTINGS
 
         mlflow.log_params(
             {
+                "phase": phase,
+                "cache_mode": cache_mode,
                 "n_trials": N_TRIALS,
                 "n_splits": N_SPLITS,
                 "batch_size": BATCH_SIZE,
+                "val_batch_size": VAL_BATCH_SIZE,
                 "num_workers": NUM_WORKERS,
                 "seed": SEED,
                 "device": str(DEVICE),
                 "rating_max_error": RATING_MAX_ERROR,
                 "embedding_dim": EMBEDDING_DIM,
+            }
+        )
+
+        # PHASE 2 ARCHITECTURE CHANGES
+
+        if phase == "phase2":
+            mlflow.log_params(
+                {
+                    "trainable_vit_blocks": TRAINABLE_VIT_BLOCKS,
+                    "trainable_bert_blocks": TRAINABLE_BERT_LAYERS,
+                }
+            )
+
+        # SEARCH-SPACE DEFINITIONS
+
+        # These describes what Optuna is allowed to search.
+
+        mlflow.log_params(
+            {
+                "learning_rate_min": 1e-5,
+                "learning_rate_max": 1e-4,
+                "weight_decay_min": 1e-6,
+                "weight_decay_max": 1e-2,
                 "min_epochs": MIN_EPOCHS,
                 "max_epochs": MAX_EPOCHS,
                 "epoch_step": EPOCH_STEP,
+                "tabular_dropout_min": MIN_DROPOUT,
+                "tabular_dropout_max": MAX_DROPOUT,
+                "tabular_dropout_step": DROPOUT_STEP,
+                "attention_dropout_min": MIN_DROPOUT,
+                "attention_dropout_max": MAX_DROPOUT,
+                "attention_dropout_step": DROPOUT_STEP,
             }
         )
+
+        if phase == "phase2":
+            mlflow.log_params(
+                {
+                    "contrastive_temperature_min": MIN_CONTRASTIVE_TEMPERATURE,
+                    "contrastive_temperature_max": MAX_CONTRASTIVE_TEMPERATURE,
+                    "contrastive_temperature_scale": "log",
+                }
+            )
 
         # RUN OPTUNA
 
@@ -283,7 +408,7 @@ def run_phase1_hyperparameter_tuning():
 
         # SAVING THE BEST CONFIGURATION
 
-        save_json(best_config, BEST_CONFIG)
+        save_json(best_config, best_config_path)
 
         mlflow.log_artifact(str(BEST_CONFIG), artifact_path="configs")
 
@@ -315,11 +440,13 @@ def run_phase1_hyperparameter_tuning():
 
         # SAVE CV RESULTS
 
-        save_json(cv_results, CV_RESULTS)
+        save_json(cv_results, cv_results_path)
 
         mlflow.log_artifact(str(CV_RESULTS), artifact_path="metrics")
 
         # BEST-TRIAL SUMMARY ON TOP-LEVEL RUN
+
+        mlflow.log_param("best_trial_number", best_trial.number)
 
         mlflow.log_metrics(
             {
@@ -359,4 +486,4 @@ def run_phase1_hyperparameter_tuning():
 
 
 if __name__ == "__main__":
-    run_phase1_hyperparameter_tuning()
+    run_hyperparameter_tuning(phase="phase2")

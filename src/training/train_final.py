@@ -13,7 +13,7 @@ from config.paths import (
 )
 from src.dataset.c_model_data.custom_dataset import MovieDataset
 from src.losses.model_losses import MultiTaskLoss
-from src.models.cinefusion_model import CineFusionModel
+from src.models.movio_model import MovioModel
 
 # DEVICE
 
@@ -130,7 +130,7 @@ def train_final():
 
     # MODEL
 
-    model = CineFusionModel(
+    model = MovioModel(
         tabular_input_dim=tabular_input_dim,
         tabular_hidden_dim=best_config["tabular_hidden_dim"],
         embedding_dim=best_config["embedding_dim"],

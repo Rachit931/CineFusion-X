@@ -8,7 +8,7 @@ from src.evaluation.metrics import (
     compute_composite_score,
 )
 from src.losses.model_losses import MultiTaskLoss
-from src.models.cinefusion_model import CineFusionModel
+from src.models.movio_model import CineFusionModel
 
 # DEVICE
 
@@ -16,8 +16,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 TRAINABLE_VIT_BLOCKS = 3
 TRAINABLE_BERT_LAYERS = 3
-
-CONTRASTIVE_TEMPERATURE = 0.07
 
 # PHASE 1 TRAINING
 # phase1_cache
@@ -34,7 +32,7 @@ CONTRASTIVE_TEMPERATURE = 0.07
 # Phase 2 can optionally intialize from a Phase-1 checkpoint.
 
 
-def train_phase_1(
+def training(
     train_loader,
     val_loader,
     tabular_input_dim,
@@ -44,6 +42,9 @@ def train_phase_1(
     tabular_hidden_dim,
     embedding_dim,
     rating_max_error,
+    tabular_dropout,
+    attention_dropout,
+    contrastive_temp,
     phase="phase1",
 ):
     """
@@ -75,6 +76,8 @@ def train_phase_1(
             tabular_input_dim=tabular_input_dim,
             tabular_hidden_dim=tabular_hidden_dim,
             embedding_dim=embedding_dim,
+            tabular_dropout=tabular_dropout,
+            attention_dropout=attention_dropout,
             cache_mode="phase1_cache",
         )
 
@@ -85,6 +88,8 @@ def train_phase_1(
             embedding_dim=embedding_dim,
             trainable_vit_blocks=TRAINABLE_VIT_BLOCKS,
             trainable_bert_layers=TRAINABLE_BERT_LAYERS,
+            tabular_dropout=tabular_dropout,
+            attention_dropout=attention_dropout,
             cache_mode="phase1_cache",
         )
 
@@ -96,9 +101,9 @@ def train_phase_1(
         criterion = MultiTaskLoss().to(DEVICE)
 
     else:
-        criterion = MultiTaskLoss(
-            phase="phase2", contrastive_temperature=CONTRASTIVE_TEMPERATURE
-        ).to(DEVICE)
+        criterion = MultiTaskLoss(phase="phase2", contrastive_temperature=contrastive_temp).to(
+            DEVICE
+        )
 
     # OPTIMIZER
     trainable_parameters = []

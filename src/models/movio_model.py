@@ -8,9 +8,9 @@ from src.models.task_heads import TaskHeads
 from src.models.vit_encoder import ViTEncoder
 
 
-class CineFusionModel(nn.Module):
+class MovioModel(nn.Module):
     """
-    CineFusion-X multimodal model.
+    MOVIO multimodal model.
 
     Supported modes:
 
@@ -38,6 +38,8 @@ class CineFusionModel(nn.Module):
         embedding_dim: int = 256,
         trainable_vit_blocks: int = 0,
         trainable_bert_layers: int = 0,
+        tabular_dropout: float = 0.1,
+        attention_dropout: float = 0.1,
         cache_mode: str = "normal",
     ):
 
@@ -73,12 +75,12 @@ class CineFusionModel(nn.Module):
             input_dim=tabular_input_dim,
             hidden_dim=tabular_hidden_dim,
             output_dim=embedding_dim,
-            dropout=0.1,
+            dropout=tabular_dropout,
         )
 
         # Multimodel attention
         self.multimodel_attention = MultiModalAttention(
-            embedding_dim=embedding_dim, num_heads=8, dropout=0.1
+            embedding_dim=embedding_dim, num_heads=8, dropout=attention_dropout
         )
 
         # Task Heads
@@ -96,7 +98,7 @@ class CineFusionModel(nn.Module):
         cached_text_features: torch.Tensor | None = None,
     ):
         """
-        Run CineFusion-X according to the configured cache mode.
+        Run MOVIO according to the configured cache mode.
 
         Inputs:
             features:
