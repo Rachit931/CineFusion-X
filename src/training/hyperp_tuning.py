@@ -12,7 +12,6 @@ from config.paths import (
 from src.dataset.c_model_data.data_loader import create_dataset
 from src.training.cross_validation import (
     BATCH_SIZE,
-    VAL_BATCH_SIZE,
     N_SPLITS,
     NUM_WORKERS,
     SEED,
