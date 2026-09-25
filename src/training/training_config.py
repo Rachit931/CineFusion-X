@@ -90,7 +90,7 @@ def training(
             trainable_bert_layers=TRAINABLE_BERT_LAYERS,
             tabular_dropout=tabular_dropout,
             attention_dropout=attention_dropout,
-            cache_mode="phase1_cache",
+            cache_mode="phase2_cache",
         )
 
     model = model.to(DEVICE)
