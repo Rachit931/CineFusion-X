@@ -382,6 +382,7 @@ def run_hyperparameter_tuning(phase):
             lambda trial: objective(
                 trial,
                 dataset=dataset,
+                phase=phase,
             ),
             n_trials=N_TRIALS,
             gc_after_trial=True,

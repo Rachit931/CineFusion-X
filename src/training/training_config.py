@@ -8,7 +8,7 @@ from src.evaluation.metrics import (
     compute_composite_score,
 )
 from src.losses.model_losses import MultiTaskLoss
-from src.models.movio_model import CineFusionModel
+from src.models.movio_model import MovioModel
 
 # DEVICE
 
@@ -72,7 +72,7 @@ def training(
     # CACHE MODE
 
     if phase == "phase1":
-        model = CineFusionModel(
+        model = MovioModel(
             tabular_input_dim=tabular_input_dim,
             tabular_hidden_dim=tabular_hidden_dim,
             embedding_dim=embedding_dim,
@@ -82,7 +82,7 @@ def training(
         )
 
     else:
-        model = CineFusionModel(
+        model = MovioModel(
             tabular_input_dim=tabular_input_dim,
             tabular_hidden_dim=tabular_hidden_dim,
             embedding_dim=embedding_dim,
