@@ -341,7 +341,7 @@ def run_hyperparameter_tuning(phase):
             mlflow.log_params(
                 {
                     "trainable_vit_blocks": TRAINABLE_VIT_BLOCKS,
-                    "trainable_bert_blocks": TRAINABLE_BERT_LAYERS,
+                    "trainable_bert_layers": TRAINABLE_BERT_LAYERS,
                 }
             )
 
@@ -411,7 +411,7 @@ def run_hyperparameter_tuning(phase):
 
         save_json(best_config, best_config_path)
 
-        mlflow.log_artifact(str(BEST_CONFIG), artifact_path="configs")
+        mlflow.log_artifact(str(best_config_path), artifact_path="configs")
 
         # BUILD OPTUNA / CV HISTORY
 
@@ -443,7 +443,7 @@ def run_hyperparameter_tuning(phase):
 
         save_json(cv_results, cv_results_path)
 
-        mlflow.log_artifact(str(CV_RESULTS), artifact_path="metrics")
+        mlflow.log_artifact(str(cv_results_path), artifact_path="metrics")
 
         # BEST-TRIAL SUMMARY ON TOP-LEVEL RUN
 
@@ -459,7 +459,7 @@ def run_hyperparameter_tuning(phase):
 
     # SUMMARY
 
-    utils.print_section("BEST PHASE-1 CONFIGURATION")
+    utils.print_section(f"BEST {phase.upper()} CONFIGURATION")
 
     for key, value in best_config.items():
         print(f"{key}: {value}")
@@ -481,8 +481,8 @@ def run_hyperparameter_tuning(phase):
         "best_cv_composite_score": best_cv_composite_score,
         "mean_best_epoch": mean_best_epoch,
         "mean_val_loss_at_best_epoch": mean_val_loss_at_best_epoch,
-        "best_config_path": str(BEST_CONFIG),
-        "cv_results_path": str(CV_RESULTS),
+        "best_config_path": str(best_config_path),
+        "cv_results_path": str(cv_results_path),
     }
 
 
