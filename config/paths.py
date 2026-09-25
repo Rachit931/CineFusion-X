@@ -9,7 +9,7 @@ load_dotenv()
 
 # Root directory containing the dataset
 
-DATA_ROOT = Path(os.getenv("CINEFUSION_DATA_ROOT", "./data")).expanduser().resolve()
+DATA_ROOT = Path(os.getenv("MOVIO_ROOT", "./data")).expanduser().resolve()
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -48,6 +48,10 @@ BOX_OFFICE_DIR = FEATURE_DIR / "box_office"
 CONTENT_RATING_DIR = FEATURE_DIR / "content_rating"
 GENERAL_DIR = FEATURE_DIR / "general"
 
+# RETRIEVAL DATA
+
+RETRIEVAL_DIR = DATA_ROOT / "retrieval"
+
 # LOGS
 
 LOG_DIR = DATA_ROOT / "logs"
@@ -69,6 +73,7 @@ CACHING_DIR = ARTIFACTS_DIR / "cache"
 PHASE1_CACHE_DIR = CACHING_DIR / "phase1_cache"
 
 PHASE2_CACHE_DIR = CACHING_DIR / "phase2_cache"
+
 # Automatically create folders
 
 DIRECTORIES = [
@@ -98,6 +103,7 @@ DIRECTORIES = [
     CACHING_DIR,
     PHASE1_CACHE_DIR,
     PHASE2_CACHE_DIR,
+    RETRIEVAL_DIR,
 ]
 
 for directory in DIRECTORIES:
