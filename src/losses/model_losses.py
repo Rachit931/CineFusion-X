@@ -276,7 +276,7 @@ class MultiTaskLoss(nn.Module):
             0.8,
             0.5,
         ),
-        phase: str = "phas1",
+        phase: str = "phase1",
         contrastive_temperature: float = 0.07,
         contrastive_weight_init: float = 1.0,
     ):

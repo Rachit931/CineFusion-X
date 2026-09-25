@@ -14,8 +14,24 @@ from src.models.cinefusion_model import CineFusionModel
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+TRAINABLE_VIT_BLOCKS = 3
+TRAINABLE_BERT_LAYERS = 3
+
+CONTRASTIVE_TEMPERATURE = 0.07
 
 # PHASE 1 TRAINING
+# phase1_cache
+# task losses only
+
+# PHASE 2 TRAINING
+# phase2_cache
+# 3 trainable ViT blocks
+# 3 trainable BERT layers
+# task losses
+# multimodal contrastive loss
+# learnable contrastive_loss weighting
+
+# Phase 2 can optionally intialize from a Phase-1 checkpoint.
 
 
 def train_phase_1(
@@ -28,6 +44,7 @@ def train_phase_1(
     tabular_hidden_dim,
     embedding_dim,
     rating_max_error,
+    phase="phase1",
 ):
     """
     Train one Phase-1 configuration on one CV fold.
@@ -38,22 +55,50 @@ def train_phase_1(
     Phase-1 objective:
         L_phase1 = L_task
 
+    Phase-2 objective:
+        L_phase2 = L_task + exp(-s) * L_infoNCE + s
+
     Returns: tuple
         best_composite_score, best_epoch, val_loss_at_best_epoch
     """
+    # VALIDATE PHASE
 
-    # Model
-    model = CineFusionModel(
-        tabular_input_dim=tabular_input_dim,
-        tabular_hidden_dim=tabular_hidden_dim,
-        embedding_dim=embedding_dim,
-        cache_mode="phase1_cache",
-    )
+    phase = phase.lower()
+
+    if phase not in {"phase1", "phase2"}:
+        raise ValueError("pahse must be either 'phase1' or 'phase2'.")
+
+    # CACHE MODE
+
+    if phase == "phase1":
+        model = CineFusionModel(
+            tabular_input_dim=tabular_input_dim,
+            tabular_hidden_dim=tabular_hidden_dim,
+            embedding_dim=embedding_dim,
+            cache_mode="phase1_cache",
+        )
+
+    else:
+        model = CineFusionModel(
+            tabular_input_dim=tabular_input_dim,
+            tabular_hidden_dim=tabular_hidden_dim,
+            embedding_dim=embedding_dim,
+            trainable_vit_blocks=TRAINABLE_VIT_BLOCKS,
+            trainable_bert_layers=TRAINABLE_BERT_LAYERS,
+            cache_mode="phase1_cache",
+        )
 
     model = model.to(DEVICE)
 
     # LOSS
-    criterion = MultiTaskLoss().to(DEVICE)
+
+    if phase == "phase1":
+        criterion = MultiTaskLoss().to(DEVICE)
+
+    else:
+        criterion = MultiTaskLoss(
+            phase="phase2", contrastive_temperature=CONTRASTIVE_TEMPERATURE
+        ).to(DEVICE)
 
     # OPTIMIZER
     trainable_parameters = []
@@ -61,6 +106,14 @@ def train_phase_1(
     for parameter in model.parameters():
         if parameter.requires_grad:
             trainable_parameters.append(parameter)
+
+    # In Phase 2, the loss contains the learnable
+    # uncertainity parameter s.
+
+    if phase == "phase2":
+        for parameter in criterion.parameters():
+            if parameter.requires_grad:
+                trainable_parameters.append(parameter)
 
     optimizer = torch.optim.AdamW(
         trainable_parameters,
@@ -77,7 +130,7 @@ def train_phase_1(
     )
 
     # EARLY STOPPING
-    early_stopping_patience = 7
+    early_stopping_patience = 10
     epochs_without_improvement = 0
 
     # BEST VALIDATION LOSS & BEST EPOCH TRACKING
@@ -93,8 +146,25 @@ def train_phase_1(
         running_train_loss = 0.0
 
         for batch_idx, batch in enumerate(train_loader, start=1):
-            cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
-            cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
+            # PHASE 1 INPUTS:
+
+            if phase == "phase1":
+                cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
+                cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
+                attention_mask = None
+
+            # PHASE 2 INPUTS:
+
+            else:
+                cached_visual_embedding = None
+                cached_text_embedding = None
+
+                cached_visual_features = batch["cached_visual_features"].to(DEVICE)
+
+                cached_text_features = batch["cached_text_features"].to(DEVICE)
+
+                attention_mask = batch["attention_mask"].to(DEVICE)
+
             features = batch["features"].to(DEVICE)
 
             targets = {
@@ -121,18 +191,47 @@ def train_phase_1(
                 dtype=torch.bfloat16,
                 enabled=DEVICE.type == "cuda",
             ):
-                outputs = model(
-                    features=features,
-                    cached_visual_embedding=cached_visual_embedding,
-                    cached_text_embedding=cached_text_embedding,
-                )
+                # PHASE 1 FORWARD
 
-                # Calculate the multitasked masked loss
-                losses = criterion(
-                    predictions=outputs["predictions"],
-                    targets=targets,
-                    masks=masks,
-                )
+                if phase == "phase1":
+                    outputs = model(
+                        features=features,
+                        cached_visual_embedding=cached_visual_embedding,
+                        cached_text_embedding=cached_text_embedding,
+                    )
+
+                # PHASE 2 FORWARD
+                if phase == "phase2":
+                    outputs = model(
+                        features=features,
+                        cached_visual_features=cached_visual_features,
+                        cached_text_features=cached_text_features,
+                        attention_mask=attention_mask,
+                    )
+
+                # Calculate the multitasked masked loss.
+
+                # For Phase 1 this is only the four supervised
+                # task losses.
+
+                # For Phase 2 this also receives the three modality
+                # embeddings required for the contrastive loss.
+                if phase == "phase1":
+                    losses = criterion(
+                        predictions=outputs["predictions"],
+                        targets=targets,
+                        masks=masks,
+                    )
+
+                else:
+                    losses = criterion(
+                        predictions=outputs["predictions"],
+                        targets=targets,
+                        masks=masks,
+                        visual_embedding=outputs["visual_embedding"],
+                        text_embedding=outputs["text_embedding"],
+                        tabular_embedding=outputs["tabular_embedding"],
+                    )
 
             total_loss = losses["total_loss"]
 
@@ -183,8 +282,19 @@ def train_phase_1(
 
         with torch.inference_mode():
             for batch in val_loader:
-                cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
-                cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
+                # PHASE 1 INPUTS
+
+                if phase == "phase1":
+                    cached_visual_embedding = batch["cached_visual_embedding"].to(DEVICE)
+                    cached_text_embedding = batch["cached_text_embedding"].to(DEVICE)
+                    attention_mask = None
+
+                # PHASE 2 INPUTS
+                else:
+                    cached_visual_features = batch["cached_visual_features"].to(DEVICE)
+                    cached_text_features = batch["cached_text_features"].to(DEVICE)
+                    attention_mask = batch["attention_mask"].to(DEVICE)
+
                 features = batch["features"].to(DEVICE)
 
                 targets = {
@@ -207,18 +317,43 @@ def train_phase_1(
                     dtype=torch.bfloat16,
                     enabled=DEVICE.type == "cuda",
                 ):
-                    outputs = model(
-                        features=features,
-                        cached_visual_embedding=cached_visual_embedding,
-                        cached_text_embedding=cached_text_embedding,
-                    )
+                    # PHASE 1 FORWARD
+
+                    if phase == "phase1":
+                        outputs = model(
+                            features=features,
+                            cached_visual_embedding=cached_visual_embedding,
+                            cached_text_embedding=cached_text_embedding,
+                        )
+
+                    # PHASE 2 FORWARD
+
+                    else:
+                        outputs = model(
+                            features=features,
+                            cached_visual_features=cached_visual_features,
+                            cached_text_features=cached_text_features,
+                            attention_mask=attention_mask,
+                        )
 
                     # Validation loss
-                    losses = criterion(
-                        predictions=outputs["predictions"],
-                        targets=targets,
-                        masks=masks,
-                    )
+
+                    if phase == "phase1":
+                        losses = criterion(
+                            predictions=outputs["predictions"],
+                            targets=targets,
+                            masks=masks,
+                        )
+
+                    else:
+                        losses = criterion(
+                            predictions=outputs["predictions"],
+                            targets=targets,
+                            masks=masks,
+                            visual_embedding=outputs["visual_embedding"],
+                            text_embedding=outputs["text_embedding"],
+                            tabular_embedding=outputs["tabular_embedding"],
+                        )
 
                 running_val_loss += losses["total_loss"].item()
 

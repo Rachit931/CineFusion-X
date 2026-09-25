@@ -7,7 +7,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from torch.utils.data import DataLoader, Subset
 
 import src.utils as utils
-from src.training.train_phase_1 import train_phase_1
+from src.training.training_config import train_phase_1
 
 # CONFIGURATION
 
